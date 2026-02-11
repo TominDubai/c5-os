@@ -20,7 +20,8 @@ export default async function DashboardLayout({
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              <img src="/logo.jpg" alt="Concept 5" className="h-10" />
               <Link href="/" className="text-xl font-bold text-blue-600">
                 C5 OS
               </Link>

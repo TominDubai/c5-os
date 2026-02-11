@@ -35,8 +35,12 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <div className="text-center mb-8">
+          <img 
+            src="/logo.jpg" 
+            alt="Concept 5" 
+            className="h-24 mx-auto mb-4"
+          />
           <h1 className="text-2xl font-bold text-gray-900">C5 OS</h1>
-          <p className="text-gray-600 mt-1">Concept 5 Kitchen & Wood Industries</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
