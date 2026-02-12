@@ -129,6 +129,8 @@ CREATE TABLE quotes (
   
   title TEXT NOT NULL,
   description TEXT,
+  site_address TEXT,
+  revision INTEGER DEFAULT 0,
   
   subtotal DECIMAL(12,2) DEFAULT 0,
   vat_rate DECIMAL(4,2) DEFAULT 5.00,
@@ -161,6 +163,8 @@ CREATE TABLE quote_items (
   
   item_code TEXT NOT NULL,
   description TEXT NOT NULL,
+  image_url TEXT,
+  size TEXT,
   
   job_code TEXT,
   type_code TEXT,
@@ -168,8 +172,8 @@ CREATE TABLE quote_items (
   room_code TEXT,
   sequence INTEGER,
   
-  quantity INTEGER DEFAULT 1,
-  unit TEXT DEFAULT 'unit',
+  quantity DECIMAL(10,2) DEFAULT 1,
+  unit TEXT DEFAULT 'NO.',
   unit_price DECIMAL(12,2) NOT NULL,
   total_price DECIMAL(12,2) NOT NULL,
   
