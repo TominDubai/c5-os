@@ -23,7 +23,7 @@ export default async function DashboardLayout({
             <div className="flex items-center gap-3">
               <img src="/logo.jpg" alt="Concept 5" className="h-10" />
               <Link href="/" className="text-xl font-bold text-blue-600">
-                C5 OS
+                Concept 5 OS
               </Link>
             </div>
             <div className="flex items-center space-x-4">
