@@ -53,6 +53,9 @@ export default function NewQuotePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [jobCode, setJobCode] = useState('XX')
+  const [importing, setImporting] = useState(false)
+  const [importedItems, setImportedItems] = useState<any[]>([])
+  const [showImportPreview, setShowImportPreview] = useState(false)
   
   const [formData, setFormData] = useState({
     title: '',
@@ -126,6 +129,78 @@ export default function NewQuotePage() {
       key,
       seq: nextSeq,
     }
+  }
+
+  const handlePdfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setImporting(true)
+    setError('')
+    
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const response = await fetch('/api/parse-boq', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to parse PDF')
+      }
+      
+      if (data.items && data.items.length > 0) {
+        setImportedItems(data.items)
+        setShowImportPreview(true)
+      } else {
+        setError('No BOQ items found in the PDF')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to import PDF')
+    } finally {
+      setImporting(false)
+      // Reset file input
+      e.target.value = ''
+    }
+  }
+
+  const addImportedItems = () => {
+    const year = new Date().getFullYear().toString().slice(-2)
+    let currentSequences = { ...sequences }
+    
+    const newItems: QuoteItem[] = importedItems.map((item, index) => {
+      // Default to Joinery type, Ground Floor for imported items
+      const typeCode = 'J'
+      const floorCode = 'GF'
+      const room = '01'
+      const key = `${typeCode}-${floorCode}-RM${room}`
+      const currentSeq = currentSequences[key] || 0
+      const nextSeq = currentSeq + 1
+      currentSequences[key] = nextSeq
+      
+      const itemCode = `${year}${jobCode}-${typeCode}-${floorCode}-RM${room}-${nextSeq.toString().padStart(3, '0')}`
+      
+      return {
+        id: crypto.randomUUID(),
+        item_code: itemCode,
+        image_url: null,
+        description: item.description || '',
+        size: item.size || '',
+        unit: item.unit || 'NO.',
+        quantity: parseFloat(item.quantity) || 1,
+        unit_price: parseFloat(item.unit_price) || 0,
+        amount: (parseFloat(item.quantity) || 1) * (parseFloat(item.unit_price) || 0),
+      }
+    })
+    
+    setItems([...items, ...newItems])
+    setSequences(currentSequences)
+    setImportedItems([])
+    setShowImportPreview(false)
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -362,9 +437,105 @@ export default function NewQuotePage() {
           </div>
         </div>
 
+        {/* Import from PDF */}
+        <div className="bg-white p-6 rounded-lg shadow mb-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Import from PDF</h2>
+            <label className={`cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium ${
+              importing 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}>
+              {importing ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  Parsing...
+                </>
+              ) : (
+                <>
+                  📄 Upload PDF
+                </>
+              )}
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handlePdfImport}
+                disabled={importing}
+                className="hidden"
+              />
+            </label>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">
+            Upload an existing quote PDF to automatically extract BOQ items
+          </p>
+        </div>
+
+        {/* Import Preview Modal */}
+        {showImportPreview && importedItems.length > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg shadow mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                📋 Imported Items Preview ({importedItems.length} items)
+              </h2>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportedItems([])
+                    setShowImportPreview(false)
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={addImportedItems}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
+                >
+                  ✓ Add All to BOQ
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-yellow-200">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
+                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Unit</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-yellow-100">
+                  {importedItems.map((item, index) => (
+                    <tr key={index}>
+                      <td className="px-4 py-2 text-sm text-gray-600">{index + 1}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                      <td className="px-4 py-2 text-sm text-gray-600">{item.size || '-'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-600 text-center">{item.unit || 'NO.'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">{item.quantity || 1}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">AED {(item.unit_price || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right font-medium">
+                        AED {((item.quantity || 1) * (item.unit_price || 0)).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-sm text-yellow-700 mt-4">
+              ⚠️ Items will be assigned Joinery (J) type codes. You can edit them after adding.
+            </p>
+          </div>
+        )}
+
         {/* Add Item Form */}
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Add BOQ Item</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Add BOQ Item Manually</h2>
           
           {/* Row 1: Code generation fields */}
           <div className="grid grid-cols-4 gap-4 mb-4">
