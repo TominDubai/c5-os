@@ -67,17 +67,23 @@ export default async function ProjectsPage({
 
       {/* Status Filter Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
-        {['all', 'in_design', 'in_production', 'in_installation', 'completed'].map((status) => (
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'in_design', label: 'Design' },
+          { key: 'in_production', label: 'Production' },
+          { key: 'in_installation', label: 'Installation' },
+          { key: 'completed', label: 'Completed' },
+        ].map((tab) => (
           <Link
-            key={status}
-            href={`/projects${status === 'all' ? '' : `?status=${status}`}`}
+            key={tab.key}
+            href={`/projects${tab.key === 'all' ? '' : `?status=${tab.key}`}`}
             className={`px-4 py-2 rounded-md text-sm font-medium ${
-              (params.status || 'all') === status
+              (params.status || 'all') === tab.key
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {status === 'all' ? 'All' : statusLabels[status]?.split(' ')[1] || status}
+            {tab.label}
           </Link>
         ))}
       </div>
