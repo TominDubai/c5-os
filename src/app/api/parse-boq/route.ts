@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pdf from 'pdf-parse'
-import OpenAI from 'openai'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,13 +20,8 @@ export async function POST(request: NextRequest) {
     const pdfData = await pdf(buffer)
     const pdfText = pdfData.text
 
-    // Use OpenAI to parse the BOQ items
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a BOQ (Bill of Quantity) parser for a joinery company. Extract line items from the provided quote/BOQ text.
+    // Use Ollama (local LLM) to parse the BOQ items
+    const prompt = `You are a BOQ (Bill of Quantity) parser for a joinery company. Extract line items from the provided quote/BOQ text.
 
 For each item, extract:
 - description: The item name and details
@@ -54,17 +46,32 @@ If you can't find certain fields, use reasonable defaults:
 - unit: "NO."
 - quantity: 1
 
-Only return the JSON array, no other text.`
-        },
-        {
-          role: 'user',
-          content: `Parse the BOQ items from this quote:\n\n${pdfText}`
+Only return the JSON array, no other text or markdown formatting.
+
+Parse the BOQ items from this quote:
+
+${pdfText}`
+
+    const ollamaResponse = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3:8b',
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.1,
         }
-      ],
-      temperature: 0.1,
+      }),
     })
 
-    const responseText = completion.choices[0]?.message?.content || '[]'
+    if (!ollamaResponse.ok) {
+      const errorText = await ollamaResponse.text()
+      throw new Error(`Ollama error: ${errorText}`)
+    }
+
+    const ollamaData = await ollamaResponse.json()
+    const responseText = ollamaData.response || '[]'
     
     // Parse the JSON response
     let items = []
@@ -82,10 +89,11 @@ Only return the JSON array, no other text.`
       }
       items = JSON.parse(cleanJson.trim())
     } catch (parseError) {
-      console.error('Failed to parse AI response:', responseText)
+      console.error('Failed to parse LLM response:', responseText)
       return NextResponse.json({ 
         error: 'Failed to parse BOQ items',
-        rawText: pdfText.slice(0, 2000) // Return some text for debugging
+        rawText: pdfText.slice(0, 2000),
+        llmResponse: responseText.slice(0, 1000)
       }, { status: 422 })
     }
 
