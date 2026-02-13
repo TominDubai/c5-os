@@ -9,15 +9,36 @@ interface QuoteActionsProps {
   currentStatus: string
   clientId: string | null
   enquiryId: string | null
+  paymentReceived?: boolean
+  quoteTotal?: number
 }
 
-export default function QuoteActions({ quoteId, currentStatus, clientId, enquiryId }: QuoteActionsProps) {
+export default function QuoteActions({ 
+  quoteId, 
+  currentStatus, 
+  clientId, 
+  enquiryId,
+  paymentReceived = false,
+  quoteTotal = 0
+}: QuoteActionsProps) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
+  
+  // Payment form state
+  const [paymentAmount, setPaymentAmount] = useState(quoteTotal.toString())
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentReference, setPaymentReference] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('bank_transfer')
+  const [paymentNotes, setPaymentNotes] = useState('')
+  
+  // Convert form state
   const [projectName, setProjectName] = useState('')
   const [siteAddress, setSiteAddress] = useState('')
+  const [designDueDate, setDesignDueDate] = useState('')
+  const [designerEmail, setDesignerEmail] = useState('')
 
   const updateStatus = async (newStatus: string) => {
     setLoading(true)
@@ -54,6 +75,37 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
     setLoading(false)
   }
 
+  const confirmPayment = async () => {
+    if (!paymentAmount || !paymentDate) {
+      alert('Please enter payment amount and date')
+      return
+    }
+    
+    setLoading(true)
+    
+    const { error } = await supabase
+      .from('quotes')
+      .update({
+        payment_received: true,
+        payment_amount: parseFloat(paymentAmount),
+        payment_date: paymentDate,
+        payment_reference: paymentReference || null,
+        payment_method: paymentMethod,
+        payment_notes: paymentNotes || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', quoteId)
+    
+    if (error) {
+      alert('Failed to confirm payment: ' + error.message)
+    } else {
+      setShowPaymentModal(false)
+      router.refresh()
+    }
+    
+    setLoading(false)
+  }
+
   const convertToProject = async () => {
     if (!projectName.trim()) {
       alert('Please enter a project name')
@@ -80,35 +132,40 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
           client_id: clientId,
           name: projectName,
           site_address: siteAddress || null,
-          project_type: quote.enquiry_id ? null : 'other', // Will be set from enquiry if available
+          project_type: quote.enquiry_id ? null : 'other',
           contract_value: quote.total,
           status: 'design_pending',
           start_date: new Date().toISOString().split('T')[0],
+          design_due_date: designDueDate || null,
         }])
         .select()
         .single()
       
       if (projectError || !project) throw new Error('Failed to create project')
       
-      // Create project items from quote items
-      const projectItems = quote.quote_items.map((item: any) => ({
-        project_id: project.id,
-        quote_item_id: item.id,
-        item_code: item.item_code,
-        description: item.description,
-        type_code: item.type_code,
-        floor_code: item.floor_code,
-        room_code: item.room_code,
-        sequence: item.sequence,
-        quantity: item.quantity,
-        status: 'pre_production',
-      }))
-      
-      const { error: itemsError } = await supabase
-        .from('project_items')
-        .insert(projectItems)
-      
-      if (itemsError) throw new Error('Failed to create project items')
+      // Create project items from quote items - status: awaiting_drawings
+      if (quote.quote_items && quote.quote_items.length > 0) {
+        const projectItems = quote.quote_items.map((item: any) => ({
+          project_id: project.id,
+          quote_item_id: item.id,
+          item_code: item.item_code,
+          description: item.description,
+          type_code: item.type_code || null,
+          floor_code: item.floor_code || null,
+          room_code: item.room_code || null,
+          sequence: item.sequence || null,
+          quantity: Math.round(Number(item.quantity) || 1),
+          status: 'awaiting_drawings', // NEW: Start in drawings phase
+        }))
+        
+        const { error: itemsError } = await supabase
+          .from('project_items')
+          .insert(projectItems)
+        
+        if (itemsError) {
+          throw new Error(`Failed to create items: ${itemsError.message}`)
+        }
+      }
       
       // Update quote status to converted
       await supabase
@@ -122,6 +179,32 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
           .from('enquiries')
           .update({ status: 'won', updated_at: new Date().toISOString() })
           .eq('id', enquiryId)
+      }
+      
+      // Send email notification to design team
+      if (designerEmail) {
+        try {
+          await fetch('/api/notify-design-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: project.id,
+              projectName,
+              itemCount: quote.quote_items?.length || 0,
+              designDueDate,
+              designerEmail,
+            }),
+          })
+          
+          // Mark as notified
+          await supabase
+            .from('projects')
+            .update({ design_team_notified_at: new Date().toISOString() })
+            .eq('id', project.id)
+        } catch (e) {
+          console.error('Failed to send design team notification:', e)
+          // Don't block project creation if email fails
+        }
       }
       
       // Navigate to the new project
@@ -178,14 +261,35 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
             </>
           )}
           
-          {currentStatus === 'approved' && (
+          {currentStatus === 'approved' && !paymentReceived && (
             <button
-              onClick={() => setShowConvertModal(true)}
+              onClick={() => setShowPaymentModal(true)}
               disabled={loading}
-              className="w-full bg-emerald-600 text-white py-2 px-4 rounded-md hover:bg-emerald-700 disabled:opacity-50"
+              className="w-full bg-amber-600 text-white py-2 px-4 rounded-md hover:bg-amber-700 disabled:opacity-50"
             >
-              🚀 Convert to Project
+              💰 Confirm Payment Received
             </button>
+          )}
+          
+          {currentStatus === 'approved' && paymentReceived && (
+            <>
+              <div className="bg-green-50 text-green-800 px-3 py-2 rounded-md text-sm mb-2">
+                ✅ Payment received
+              </div>
+              <button
+                onClick={() => setShowConvertModal(true)}
+                disabled={loading}
+                className="w-full bg-emerald-600 text-white py-2 px-4 rounded-md hover:bg-emerald-700 disabled:opacity-50"
+              >
+                🚀 Convert to Project
+              </button>
+            </>
+          )}
+          
+          {currentStatus === 'converted' && (
+            <div className="text-center text-green-600 py-2 font-medium">
+              ✅ Converted to Project
+            </div>
           )}
           
           {currentStatus === 'rejected' && (
@@ -196,13 +300,106 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
         </div>
       </div>
 
+      {/* Payment Confirmation Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">💰 Confirm Payment</h3>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount Received (AED) *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Date *
+                </label>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Payment Method
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="cash">Cash</option>
+                  <option value="credit_card">Credit Card</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reference / Transaction ID
+                </label>
+                <input
+                  type="text"
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  placeholder="e.g., TRN123456"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={confirmPayment}
+                disabled={loading}
+                className="flex-1 bg-amber-600 text-white py-2 rounded-md hover:bg-amber-700 disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : '✅ Confirm Payment'}
+              </button>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Convert to Project Modal */}
       {showConvertModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Convert to Project</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">🚀 Convert to Project</h3>
             <p className="text-gray-600 mb-4">
-              This will create a new project with all quote items ready for production scheduling.
+              Items will be sent to the design team for drawings.
             </p>
             
             <div className="space-y-4 mb-6">
@@ -232,6 +429,31 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Design Due Date
+                </label>
+                <input
+                  type="date"
+                  value={designDueDate}
+                  onChange={(e) => setDesignDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Design Team Email (for notification)
+                </label>
+                <input
+                  type="email"
+                  value={designerEmail}
+                  onChange={(e) => setDesignerEmail(e.target.value)}
+                  placeholder="e.g., design@concept5.ae"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
             
             <div className="flex gap-3">
@@ -240,13 +462,15 @@ export default function QuoteActions({ quoteId, currentStatus, clientId, enquiry
                 disabled={loading}
                 className="flex-1 bg-emerald-600 text-white py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50"
               >
-                {loading ? 'Creating...' : '🚀 Create Project'}
+                {loading ? 'Creating...' : '🚀 Create Project & Notify Design'}
               </button>
               <button
                 onClick={() => {
                   setShowConvertModal(false)
                   setProjectName('')
                   setSiteAddress('')
+                  setDesignDueDate('')
+                  setDesignerEmail('')
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >

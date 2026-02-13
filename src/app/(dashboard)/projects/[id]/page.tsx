@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ProjectTabs from './ProjectTabs'
+import ProjectActions from './ProjectActions'
 
 const statusColors: Record<string, string> = {
   design_pending: 'bg-gray-100 text-gray-800',
@@ -53,10 +54,12 @@ export default async function ProjectDetailPage({
   const items = project.project_items || []
   const itemStats = {
     total: items.length,
-    pre_production: items.filter((i: any) => i.status === 'pre_production').length,
-    in_production: items.filter((i: any) => i.status === 'in_production').length,
-    ready_for_qc: items.filter((i: any) => i.status === 'ready_for_qc').length,
-    dispatched: items.filter((i: any) => ['dispatched', 'on_site'].includes(i.status)).length,
+    awaiting_drawings: items.filter((i: any) => i.status === 'awaiting_drawings').length,
+    in_design: items.filter((i: any) => i.status === 'in_design').length,
+    drawings_complete: items.filter((i: any) => ['drawings_complete', 'awaiting_client_approval'].includes(i.status)).length,
+    approved: items.filter((i: any) => ['approved', 'production_scheduling'].includes(i.status)).length,
+    in_production: items.filter((i: any) => ['in_production', 'ready_for_qc'].includes(i.status)).length,
+    dispatched: items.filter((i: any) => ['ready_for_dispatch', 'dispatched', 'on_site'].includes(i.status)).length,
     installed: items.filter((i: any) => i.status === 'installed').length,
     verified: items.filter((i: any) => i.status === 'qs_verified').length,
   }
@@ -88,34 +91,43 @@ export default async function ProjectDetailPage({
           <div className="text-2xl font-bold text-gray-900">
             AED {project.contract_value?.toLocaleString() || '0'}
           </div>
-          <div className="text-sm text-gray-500">Contract Value</div>
+          <div className="text-sm text-gray-500 mb-2">Contract Value</div>
+          <ProjectActions projectId={project.id} projectName={project.name} />
         </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-6 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-gray-400">{itemStats.pre_production}</div>
-          <div className="text-xs text-gray-500">Pre-Prod</div>
+      <div className="grid grid-cols-8 gap-3 mb-6">
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-amber-600">{itemStats.awaiting_drawings}</div>
+          <div className="text-xs text-gray-500">Drawings</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-yellow-600">{itemStats.in_production}</div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-yellow-600">{itemStats.in_design}</div>
+          <div className="text-xs text-gray-500">In Design</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-cyan-600">{itemStats.drawings_complete}</div>
+          <div className="text-xs text-gray-500">Complete</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-lime-600">{itemStats.approved}</div>
+          <div className="text-xs text-gray-500">Approved</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-blue-600">{itemStats.in_production}</div>
           <div className="text-xs text-gray-500">In Prod</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-blue-600">{itemStats.ready_for_qc}</div>
-          <div className="text-xs text-gray-500">QC Queue</div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-purple-600">{itemStats.dispatched}</div>
+          <div className="text-xs text-gray-500">Shipped</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-purple-600">{itemStats.dispatched}</div>
-          <div className="text-xs text-gray-500">Dispatched</div>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-orange-600">{itemStats.installed}</div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-teal-600">{itemStats.installed}</div>
           <div className="text-xs text-gray-500">Installed</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-4 text-center">
-          <div className="text-2xl font-bold text-green-600">{itemStats.verified}</div>
+        <div className="bg-white rounded-lg shadow p-3 text-center">
+          <div className="text-xl font-bold text-green-600">{itemStats.verified}</div>
           <div className="text-xs text-gray-500">Verified</div>
         </div>
       </div>

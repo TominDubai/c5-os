@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import QuoteActions from './QuoteActions'
+import QuoteDelete from './QuoteDelete'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-800',
@@ -73,9 +74,12 @@ export default async function QuoteDetailPage({
           <div className="text-3xl font-bold text-gray-900">
             AED {quote.total?.toLocaleString() || '0'}
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 mb-2">
             Subtotal: AED {quote.subtotal?.toLocaleString() || '0'} + VAT
           </div>
+          {!existingProject && (
+            <QuoteDelete quoteId={quote.id} quoteNumber={quote.quote_number} />
+          )}
         </div>
       </div>
 
@@ -164,7 +168,42 @@ export default async function QuoteDetailPage({
               currentStatus={quote.status}
               clientId={quote.client_id}
               enquiryId={quote.enquiry_id}
+              paymentReceived={quote.payment_received || false}
+              quoteTotal={quote.total || 0}
             />
+          )}
+          
+          {/* Payment Info */}
+          {quote.payment_received && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">💰 Payment</h3>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Amount</dt>
+                  <dd className="text-gray-900 font-medium">
+                    AED {quote.payment_amount?.toLocaleString()}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Date</dt>
+                  <dd className="text-gray-900">
+                    {quote.payment_date ? new Date(quote.payment_date).toLocaleDateString('en-GB') : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Method</dt>
+                  <dd className="text-gray-900 capitalize">
+                    {quote.payment_method?.replace('_', ' ') || '—'}
+                  </dd>
+                </div>
+                {quote.payment_reference && (
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">Reference</dt>
+                    <dd className="text-gray-900">{quote.payment_reference}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
           )}
 
           {/* Quote Details */}
