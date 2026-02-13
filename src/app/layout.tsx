@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Concept 5 OS',
+  title: 'Concept 5 - OS',
   description: 'Project Management System for Concept 5',
 }
 

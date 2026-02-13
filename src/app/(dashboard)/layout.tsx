@@ -23,7 +23,7 @@ export default async function DashboardLayout({
             <div className="flex items-center gap-3">
               <img src="/logo.jpg" alt="Concept 5" className="h-10" />
               <Link href="/" className="text-xl font-bold text-blue-600">
-                Concept 5 OS
+                Concept 5 - OS
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -68,6 +68,12 @@ export default async function DashboardLayout({
               className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
             >
               📁 Projects
+            </Link>
+            <Link
+              href="/drawings"
+              className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              ✏️ Drawings
             </Link>
             <Link
               href="/production"

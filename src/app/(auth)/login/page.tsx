@@ -40,7 +40,7 @@ export default function LoginPage() {
             alt="Concept 5" 
             className="h-24 mx-auto mb-4"
           />
-          <h1 className="text-2xl font-bold text-gray-900">Concept 5 OS</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Concept 5 - OS</h1>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
