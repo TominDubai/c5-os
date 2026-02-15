@@ -26,19 +26,24 @@ export default function QuoteActions({
   const [loading, setLoading] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showConvertModal, setShowConvertModal] = useState(false)
-  
+  const [showDocuSignModal, setShowDocuSignModal] = useState(false)
+
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState(quoteTotal.toString())
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [paymentReference, setPaymentReference] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer')
   const [paymentNotes, setPaymentNotes] = useState('')
-  
+
   // Convert form state
   const [projectName, setProjectName] = useState('')
   const [siteAddress, setSiteAddress] = useState('')
   const [designDueDate, setDesignDueDate] = useState('')
   const [designerEmail, setDesignerEmail] = useState('')
+
+  // DocuSign form state
+  const [signerEmail, setSignerEmail] = useState('')
+  const [signerName, setSignerName] = useState('')
 
   const updateStatus = async (newStatus: string) => {
     setLoading(true)
@@ -218,6 +223,44 @@ export default function QuoteActions({
     }
   }
 
+  const sendViaDocuSign = async () => {
+    if (!signerEmail || !signerName) {
+      alert('Please enter signer name and email')
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await fetch('/api/docusign/send-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId,
+          signerEmail,
+          signerName,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to send via DocuSign')
+      }
+
+      const result = await response.json()
+
+      alert(`✅ Quote sent via DocuSign!\nEnvelope ID: ${result.envelopeId}`)
+      setShowDocuSignModal(false)
+      router.refresh()
+
+    } catch (err: any) {
+      console.error('Error sending via DocuSign:', err)
+      alert(err.message || 'Failed to send via DocuSign')
+    }
+
+    setLoading(false)
+  }
+
   return (
     <>
       <div className="bg-white rounded-lg shadow p-6">
@@ -225,6 +268,13 @@ export default function QuoteActions({
         <div className="space-y-2">
           {currentStatus === 'draft' && (
             <>
+              <button
+                onClick={() => setShowDocuSignModal(true)}
+                disabled={loading}
+                className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? '...' : '✍️ Send via DocuSign'}
+              </button>
               <button
                 onClick={() => updateStatus('sent')}
                 disabled={loading}
@@ -471,6 +521,67 @@ export default function QuoteActions({
                   setSiteAddress('')
                   setDesignDueDate('')
                   setDesignerEmail('')
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DocuSign Send Modal */}
+      {showDocuSignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">✍️ Send via DocuSign</h3>
+            <p className="text-gray-600 mb-4">
+              Send this quote to the client for electronic signature.
+            </p>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signer Name *
+                </label>
+                <input
+                  type="text"
+                  value={signerName}
+                  onChange={(e) => setSignerName(e.target.value)}
+                  placeholder="e.g., John Smith"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signer Email *
+                </label>
+                <input
+                  type="email"
+                  value={signerEmail}
+                  onChange={(e) => setSignerEmail(e.target.value)}
+                  placeholder="e.g., john@example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={sendViaDocuSign}
+                disabled={loading}
+                className="flex-1 bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 disabled:opacity-50"
+              >
+                {loading ? 'Sending...' : '✍️ Send for Signature'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDocuSignModal(false)
+                  setSignerEmail('')
+                  setSignerName('')
                 }}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
               >
