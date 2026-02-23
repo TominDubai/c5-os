@@ -105,6 +105,12 @@ export default async function DashboardLayout({
             >
               📄 Reports
             </Link>
+            <Link
+              href="/settings"
+              className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              ⚙️ Settings
+            </Link>
           </nav>
         </aside>
 
