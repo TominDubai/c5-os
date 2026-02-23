@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { SiteItemList, DailyReportForm } from './SiteActions'
 
 const itemStatusColors: Record<string, string> = {
   awaiting_drawings: 'bg-amber-100 text-amber-800',
@@ -480,31 +481,17 @@ function DispatchTab({ project }: { project: any }) {
 }
 
 function SiteTab({ project }: { project: any }) {
-  const onSite = project.project_items?.filter((i: any) => 
-    ['on_site', 'installed', 'qs_verified'].includes(i.status)
+  const siteItems = project.project_items?.filter((i: any) =>
+    ['dispatched', 'on_site', 'installed', 'qs_verified'].includes(i.status)
   ) || []
-  
+
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      {onSite.length > 0 ? (
-        <div className="space-y-4">
-          {onSite.map((item: any) => (
-            <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <div className="font-mono text-sm text-blue-600">{item.item_code}</div>
-                <div className="text-gray-900">{item.description}</div>
-              </div>
-              <span className={`px-3 py-1 text-sm font-medium rounded-full ${itemStatusColors[item.status]}`}>
-                {itemStatusLabels[item.status]}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-gray-500">
-          No items on site yet.
-        </div>
-      )}
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-gray-500">{siteItems.length} items in site phase</p>
+        <DailyReportForm projectId={project.id} />
+      </div>
+      <SiteItemList items={siteItems} projectId={project.id} />
     </div>
   )
 }

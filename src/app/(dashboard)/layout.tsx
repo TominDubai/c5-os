@@ -88,6 +88,12 @@ export default async function DashboardLayout({
               📦 Dispatch
             </Link>
             <Link
+              href="/site"
+              className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              🏗️ Site
+            </Link>
+            <Link
               href="/items"
               className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
             >
