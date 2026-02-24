@@ -7,16 +7,18 @@ import { useRouter } from 'next/navigation'
 interface QuoteActionsProps {
   quoteId: string
   currentStatus: string
+  approvalStatus?: string
   clientId: string | null
   enquiryId: string | null
   paymentReceived?: boolean
   quoteTotal?: number
 }
 
-export default function QuoteActions({ 
-  quoteId, 
-  currentStatus, 
-  clientId, 
+export default function QuoteActions({
+  quoteId,
+  currentStatus,
+  approvalStatus = 'not_requested',
+  clientId,
   enquiryId,
   paymentReceived = false,
   quoteTotal = 0
@@ -266,7 +268,7 @@ export default function QuoteActions({
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-3">Actions</h3>
         <div className="space-y-2">
-          {currentStatus === 'draft' && (
+          {currentStatus === 'draft' && approvalStatus === 'approved' && (
             <>
               <button
                 onClick={() => setShowDocuSignModal(true)}
@@ -282,14 +284,13 @@ export default function QuoteActions({
               >
                 {loading ? '...' : '📤 Mark as Sent'}
               </button>
-              <button
-                onClick={() => updateStatus('approved')}
-                disabled={loading}
-                className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50"
-              >
-                {loading ? '...' : '✅ Mark as Approved'}
-              </button>
             </>
+          )}
+
+          {currentStatus === 'draft' && approvalStatus !== 'approved' && (
+            <div className="bg-orange-50 text-orange-700 text-sm px-3 py-2 rounded-md">
+              Quote must be internally approved before sending to client.
+            </div>
           )}
           
           {currentStatus === 'sent' && (

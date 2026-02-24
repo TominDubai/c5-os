@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import QuoteActions from './QuoteActions'
 import QuoteDelete from './QuoteDelete'
+import QuoteAssignedTo from './QuoteAssignedTo'
+import QuoteApproval from './QuoteApproval'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-800',
@@ -21,17 +23,25 @@ export default async function QuoteDetailPage({
   const { id } = await params
   const supabase = await createClient()
   
-  const { data: quote, error } = await supabase
-    .from('quotes')
-    .select(`
-      *,
-      clients(id, name, company, email, phone),
-      enquiries(id, enquiry_number),
-      quote_items(*)
-    `)
-    .eq('id', id)
-    .single()
-  
+  const [{ data: quote, error }, { data: users }] = await Promise.all([
+    supabase
+      .from('quotes')
+      .select(`
+        *,
+        clients(id, name, company, email, phone),
+        enquiries(id, enquiry_number),
+        quote_items(*),
+        approved_by_user:users!quotes_approved_by_fkey(full_name)
+      `)
+      .eq('id', id)
+      .single(),
+    supabase
+      .from('users')
+      .select('id, full_name, role')
+      .eq('is_active', true)
+      .order('full_name'),
+  ])
+
   if (error || !quote) {
     notFound()
   }
@@ -161,11 +171,31 @@ export default async function QuoteDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Assigned QS */}
+          <QuoteAssignedTo
+            quoteId={quote.id}
+            currentAssignedTo={quote.assigned_to}
+            users={users || []}
+          />
+
+          {/* Internal Approval */}
+          {!existingProject && (
+            <QuoteApproval
+              quoteId={quote.id}
+              approvalStatus={quote.approval_status || 'not_requested'}
+              approvalNotes={quote.approval_notes}
+              approvedByName={(quote as any).approved_by_user?.full_name || null}
+              approvalCompletedAt={quote.approval_completed_at}
+              quoteStatus={quote.status}
+            />
+          )}
+
           {/* Actions */}
           {!existingProject && (
-            <QuoteActions 
-              quoteId={quote.id} 
+            <QuoteActions
+              quoteId={quote.id}
               currentStatus={quote.status}
+              approvalStatus={quote.approval_status || 'not_requested'}
               clientId={quote.client_id}
               enquiryId={quote.enquiry_id}
               paymentReceived={quote.payment_received || false}
