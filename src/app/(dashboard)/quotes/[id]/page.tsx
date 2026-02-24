@@ -171,15 +171,17 @@ export default async function QuoteDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Assigned QS */}
-          <QuoteAssignedTo
-            quoteId={quote.id}
-            currentAssignedTo={quote.assigned_to}
-            users={users || []}
-          />
+          {/* Assigned QS — only for draft quotes */}
+          {quote.status === 'draft' && (
+            <QuoteAssignedTo
+              quoteId={quote.id}
+              currentAssignedTo={quote.assigned_to}
+              users={users || []}
+            />
+          )}
 
-          {/* Internal Approval */}
-          {!existingProject && (
+          {/* Internal Approval — only for draft quotes */}
+          {quote.status === 'draft' && !existingProject && (
             <QuoteApproval
               quoteId={quote.id}
               approvalStatus={quote.approval_status || 'not_requested'}
