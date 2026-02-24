@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic()
+export const maxDuration = 60
 
-async function parsePdfText(buffer: Buffer): Promise<string> {
-  const PDFParser = (await import('pdf2json')).default
-  return new Promise((resolve, reject) => {
-    const parser = new PDFParser()
-    parser.on('pdfParser_dataReady', (data: any) => {
-      try {
-        const text = data.Pages?.map((page: any) =>
-          page.Texts?.map((t: any) =>
-            t.R?.map((r: any) => decodeURIComponent(r.T)).join('')
-          ).join(' ')
-        ).join('\n') || ''
-        resolve(text)
-      } catch {
-        resolve('')
-      }
-    })
-    parser.on('pdfParser_dataError', reject)
-    parser.parseBuffer(buffer)
-  })
-}
+const client = new Anthropic()
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,61 +17,80 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    const pdfText = await parsePdfText(buffer)
+    // Use pdf-parse for reliable text extraction
+    const pdfParse = (await import('pdf-parse')).default
+    const pdfData = await pdfParse(buffer)
+    const pdfText = pdfData.text
+
+    console.log(`PDF text length: ${pdfText.length}`)
 
     if (!pdfText.trim()) {
-      return NextResponse.json({ items: [], pageCount: 0, totalChunks: 0 })
+      return NextResponse.json({ error: 'Could not extract text from PDF. The PDF may be image-based.' }, { status: 400 })
     }
 
-    // Limit text to avoid token limits
+    // Limit to avoid token limits
     const truncatedText = pdfText.slice(0, 40000)
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 8192,
       messages: [
         {
           role: 'user',
-          content: `Extract ALL line items from this BOQ/quote document. Return ONLY a valid JSON array with no other text.
+          content: `Extract ALL line items from this BOQ/quote document. Return ONLY a valid JSON array with no other text, no explanation, no markdown.
 
-Format each item as: {"description":"item name","size":"dimensions or empty string","unit":"NO.","quantity":1,"unit_price":0}
+Each item must follow this exact format:
+[{"description":"item name","size":"","unit":"NO.","quantity":1,"unit_price":0}]
 
 Rules:
-- Extract EVERY item you can find
-- unit_price is the price per unit (not total)
-- quantity is the number of units
+- unit_price is the price per unit
 - unit must be one of: NO., SQM, LM, SET, LOT
-- size should be dimensions if visible (e.g. "2400x600mm") or empty string
-- Skip section headers, totals, and subtotals
+- size is dimensions string or empty string ""
+- Skip section headers, totals, subtotals
+- Return [] if no items found
 
-Return ONLY the JSON array:
-
+BOQ document:
 ${truncatedText}`,
         },
       ],
     })
 
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '[]'
+    const responseText = message.content[0].type === 'text' ? message.content[0].text.trim() : '[]'
+    console.log(`Claude response length: ${responseText.length}`)
+    console.log(`Claude response preview: ${responseText.slice(0, 200)}`)
 
-    // Extract JSON array from response
-    let cleanJson = responseText.trim()
-    cleanJson = cleanJson.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+    // Strip markdown if present
+    let cleanJson = responseText
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/```\s*$/i, '')
+      .trim()
 
-    const match = cleanJson.match(/\[\s*[\s\S]*\]/)
-    if (!match) {
-      return NextResponse.json({ items: [], pageCount: 0, totalChunks: 1 })
+    // Find JSON array
+    const startIdx = cleanJson.indexOf('[')
+    const endIdx = cleanJson.lastIndexOf(']')
+
+    if (startIdx === -1 || endIdx === -1) {
+      console.log('No JSON array found in response')
+      return NextResponse.json({ items: [], pageCount: pdfData.numpages, totalChunks: 1 })
     }
+
+    cleanJson = cleanJson.slice(startIdx, endIdx + 1)
 
     let items: any[] = []
     try {
-      items = JSON.parse(match[0])
-    } catch {
-      // Try fixing common JSON issues
-      const fixed = match[0]
-        .replace(/,\s*]/g, ']')
-        .replace(/,\s*}/g, '}')
-        .replace(/'/g, '"')
-      items = JSON.parse(fixed)
+      items = JSON.parse(cleanJson)
+    } catch (parseErr) {
+      console.error('JSON parse error:', parseErr)
+      // Try fixing common issues
+      try {
+        const fixed = cleanJson
+          .replace(/,\s*]/g, ']')
+          .replace(/,\s*}/g, '}')
+        items = JSON.parse(fixed)
+      } catch {
+        return NextResponse.json({ items: [], pageCount: pdfData.numpages, totalChunks: 1 })
+      }
     }
 
     // Deduplicate by description
@@ -102,9 +102,11 @@ ${truncatedText}`,
       return true
     })
 
+    console.log(`Returning ${uniqueItems.length} items`)
+
     return NextResponse.json({
       items: uniqueItems,
-      pageCount: 0,
+      pageCount: pdfData.numpages,
       totalChunks: 1,
     })
   } catch (error: any) {
