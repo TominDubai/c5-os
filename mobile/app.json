@@ -40,7 +40,8 @@
         {
           "photosPermission": "C5 Site needs photo library access to attach photos to reports."
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

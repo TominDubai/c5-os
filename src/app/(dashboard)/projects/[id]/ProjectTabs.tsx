@@ -43,9 +43,11 @@ interface ProjectTabsProps {
   activeTab: string
   itemStats: {
     total: number
-    pre_production: number
+    awaiting_drawings: number
+    in_design: number
+    drawings_complete: number
+    approved: number
     in_production: number
-    ready_for_qc: number
     dispatched: number
     installed: number
     verified: number

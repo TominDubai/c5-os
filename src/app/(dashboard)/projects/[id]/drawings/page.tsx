@@ -6,6 +6,7 @@ import Link from 'next/link'
 
 interface Drawing {
   id: string
+  item_id: string | null
   drawing_code: string
   description: string
   status: string
