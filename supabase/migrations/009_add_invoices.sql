@@ -106,7 +106,7 @@ SELECT
   i.amount as deposit_amount,
   i.status as deposit_status,
   i.due_date as deposit_due_date,
-  i.paid_at as deposit_paid_at
+  i.paid_at as invoice_paid_at
 FROM projects p
 LEFT JOIN clients c ON c.id = p.client_id
 LEFT JOIN quotes q ON q.id = p.quote_id

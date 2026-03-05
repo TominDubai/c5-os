@@ -6,9 +6,28 @@ export async function middleware(request: NextRequest) {
     request,
   })
 
+  // Check if Supabase is properly configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
+    // Demo mode: allow all requests through without authentication
+    // Also redirect /login to / in demo mode
+    console.log('🔧 Running in demo mode - Supabase not configured')
+    
+    if (request.nextUrl.pathname === '/login') {
+      console.log('🔧 Redirecting /login to / in demo mode')
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
+    
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {
@@ -31,11 +50,13 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Redirect to login if not authenticated (except for login page)
+  // Redirect to login if not authenticated (except for login/auth/public API routes)
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth')
+    !request.nextUrl.pathname.startsWith('/auth') &&
+    !request.nextUrl.pathname.startsWith('/api/demo-mode') &&
+    !request.nextUrl.pathname.startsWith('/reset-password')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
