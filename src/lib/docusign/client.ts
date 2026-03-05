@@ -29,7 +29,7 @@ function generateJWT(): string {
   const userId = process.env.DOCUSIGN_USER_ID!;
   // Use env var if available (production), fall back to file (local dev)
   const privateKey = process.env.DOCUSIGN_PRIVATE_KEY
-    ? process.env.DOCUSIGN_PRIVATE_KEY.replace(/\\n/g, '\n')
+    ? process.env.DOCUSIGN_PRIVATE_KEY.replace(/\|/g, '\n')
     : fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
 
   const now = Math.floor(Date.now() / 1000);
