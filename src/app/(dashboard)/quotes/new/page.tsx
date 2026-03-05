@@ -258,6 +258,20 @@ export default function NewQuotePage() {
     setItems(items.filter(item => item.id !== id))
   }
 
+  const handleItemImageChange = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setItems(items.map(item =>
+        item.id === id
+          ? { ...item, image_url: reader.result as string, image_file: file }
+          : item
+      ))
+    }
+    reader.readAsDataURL(file)
+  }
+
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0)
   const vatRate = 5
   const vatAmount = subtotal * (vatRate / 100)
@@ -706,13 +720,21 @@ export default function NewQuotePage() {
                     <tr key={item.id}>
                       <td className="px-4 py-4 text-sm text-gray-600">{index + 1}</td>
                       <td className="px-4 py-4">
-                        {item.image_url ? (
-                          <img src={item.image_url} alt="" className="h-12 w-12 object-cover rounded" />
-                        ) : (
-                          <div className="h-12 w-12 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">
-                            No img
-                          </div>
-                        )}
+                        <label className="cursor-pointer block">
+                          {item.image_url ? (
+                            <img src={item.image_url} alt="" className="h-12 w-12 object-cover rounded hover:opacity-80" title="Click to change image" />
+                          ) : (
+                            <div className="h-12 w-12 bg-gray-100 border-2 border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-xs hover:bg-gray-200 hover:border-gray-400" title="Click to upload image">
+                              + img
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleItemImageChange(item.id, e)}
+                            className="hidden"
+                          />
+                        </label>
                       </td>
                       <td className="px-4 py-4 text-sm font-mono text-blue-600">{item.item_code}</td>
                       <td className="px-4 py-4 text-sm text-gray-900">{item.description}</td>
