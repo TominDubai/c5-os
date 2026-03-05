@@ -27,7 +27,10 @@ interface EnvelopeArgs {
 function generateJWT(): string {
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY!;
   const userId = process.env.DOCUSIGN_USER_ID!;
-  const privateKey = fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
+  // Use env var if available (production), fall back to file (local dev)
+  const privateKey = process.env.DOCUSIGN_PRIVATE_KEY
+    ? process.env.DOCUSIGN_PRIVATE_KEY.replace(/\\n/g, '\n')
+    : fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
 
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 3600; // 1 hour expiration
