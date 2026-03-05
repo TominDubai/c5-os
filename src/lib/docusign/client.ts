@@ -28,8 +28,9 @@ function generateJWT(): string {
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY!;
   const userId = process.env.DOCUSIGN_USER_ID!;
   // Use env var if available (production), fall back to file (local dev)
+  // DOCUSIGN_PRIVATE_KEY should be the key file content base64-encoded
   const privateKey = process.env.DOCUSIGN_PRIVATE_KEY
-    ? process.env.DOCUSIGN_PRIVATE_KEY.replace(/\|/g, '\n')
+    ? Buffer.from(process.env.DOCUSIGN_PRIVATE_KEY, 'base64').toString('utf8')
     : fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
 
   const now = Math.floor(Date.now() / 1000);
