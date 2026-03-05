@@ -86,7 +86,7 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
 
     if (!tokenResponse.ok) {
       const error = await tokenResponse.text();
-      throw new Error(`Failed to get access token: ${error}`);
+      throw new Error(`Failed to get access token (${tokenResponse.status}): ${error}`);
     }
 
     const tokenData = await tokenResponse.json();
@@ -118,8 +118,9 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
       accountId: account.account_id,
     };
   } catch (error) {
-    console.error('DocuSign Auth Error:', error);
-    throw new Error('Failed to authenticate with DocuSign');
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('DocuSign Auth Error:', message);
+    throw new Error(`DocuSign auth failed: ${message}`);
   }
 }
 
