@@ -5,14 +5,12 @@ import { convertQuoteToProject } from '@/lib/projects/convert-quote';
 import { downloadSignedDocument } from '@/lib/docusign/client';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Service role client for storage uploads
-const supabaseAdmin = createClient(
+// Webhook runs server-side with no auth context — must use service role to bypass RLS
+const supabase = createClient(
   supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+const supabaseAdmin = supabase;
 
 async function saveSignedDocument(
   envelopeId: string,
