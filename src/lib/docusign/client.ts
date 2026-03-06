@@ -190,6 +190,30 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
 }
 
 /**
+ * Download the combined signed document PDF for an envelope
+ */
+export async function downloadSignedDocument(envelopeId: string): Promise<Buffer> {
+  const auth = await getDocuSignAuth();
+
+  const response = await fetch(
+    `${auth.baseUri}/restapi/v2.1/accounts/${auth.accountId}/envelopes/${envelopeId}/documents/combined`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to download signed document (${response.status}): ${error}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
  * Get envelope status
  */
 export async function getEnvelopeStatus(envelopeId: string): Promise<any> {

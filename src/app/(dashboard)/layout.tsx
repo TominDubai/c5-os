@@ -106,6 +106,12 @@ export default async function DashboardLayout({
               ✅ QC
             </Link>
             <Link
+              href="/documents"
+              className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
+            >
+              📂 Documents
+            </Link>
+            <Link
               href="/reports"
               className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
             >

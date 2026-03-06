@@ -2,10 +2,70 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { parseStringPromise } from 'xml2js';
 import { convertQuoteToProject } from '@/lib/projects/convert-quote';
+import { downloadSignedDocument } from '@/lib/docusign/client';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Service role client for storage uploads
+const supabaseAdmin = createClient(
+  supabaseUrl,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey
+);
+
+async function saveSignedDocument(
+  envelopeId: string,
+  folderName: string,
+  fileName: string,
+  relatedType: string,
+  relatedId: string
+): Promise<void> {
+  try {
+    // Find the system folder
+    const { data: folder } = await supabase
+      .from('document_folders')
+      .select('id')
+      .eq('name', folderName)
+      .eq('is_system', true)
+      .single();
+
+    if (!folder) {
+      console.warn(`[DocuSign Webhook] Folder "${folderName}" not found`);
+      return;
+    }
+
+    // Download signed PDF from DocuSign
+    const pdfBuffer = await downloadSignedDocument(envelopeId);
+    const storagePath = `${folderName.toLowerCase().replace(/ /g, '-')}/${envelopeId}-${fileName}`;
+
+    // Upload to Supabase storage
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('documents')
+      .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true });
+
+    if (uploadError) {
+      console.error(`[DocuSign Webhook] Storage upload failed: ${uploadError.message}`);
+      return;
+    }
+
+    // Record in doc_library table
+    await supabase.from('doc_library').insert({
+      folder_id: folder.id,
+      name: fileName,
+      storage_path: storagePath,
+      file_type: 'application/pdf',
+      file_size: pdfBuffer.length,
+      related_type: relatedType,
+      related_id: relatedId,
+      source: 'docusign',
+    });
+
+    console.log(`[DocuSign Webhook] Saved signed document: ${storagePath}`);
+  } catch (err: any) {
+    console.error(`[DocuSign Webhook] Failed to save signed document: ${err.message}`);
+  }
+}
 
 interface DocuSignWebhookPayload {
   envelopeId: string;
@@ -96,8 +156,9 @@ export async function POST(req: NextRequest) {
           signer_name: signerName
         }]);
 
-      // If BOQ completed, trigger deposit invoice generation
+      // If BOQ completed, save signed document and trigger deposit invoice
       if (status === 'completed' || status === 'Completed') {
+        await saveSignedDocument(envelopeId, 'Signed BOQs', `BOQ-${project.id}.pdf`, 'project', project.id);
         console.log(`[DocuSign Webhook] BOQ signed for project ${project.id} - triggering deposit invoice`);
         
         // Create 30% deposit invoice
@@ -166,8 +227,9 @@ export async function POST(req: NextRequest) {
           signer_name: signerName
         }]);
 
-      // If drawing approved, update to sent_to_production
+      // If drawing approved, save signed document and update to sent_to_production
       if (status === 'completed' || status === 'Completed') {
+        await saveSignedDocument(envelopeId, 'Signed Drawings', `Drawing-${drawing.id}.pdf`, 'drawing', drawing.id);
         console.log(`[DocuSign Webhook] Drawing approved - releasing to production`);
         
         await supabase
@@ -215,8 +277,9 @@ export async function POST(req: NextRequest) {
           signer_name: signerName
         }]);
 
-      // If completed, convert to project
+      // If completed, save signed document and convert to project
       if (status === 'completed' || status === 'Completed') {
+        await saveSignedDocument(envelopeId, 'Signed Quotes', `Quote-${quote.quote_number}.pdf`, 'quote', quote.id);
         console.log(`[DocuSign Webhook] Quote signed - converting to project`);
         await convertQuoteToProject(quote.id);
       }
