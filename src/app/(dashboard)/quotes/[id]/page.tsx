@@ -5,6 +5,7 @@ import QuoteActions from './QuoteActions'
 import QuoteDelete from './QuoteDelete'
 import QuoteAssignedTo from './QuoteAssignedTo'
 import QuoteApproval from './QuoteApproval'
+import DocuSignStatus from './DocuSignStatus'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-800',
@@ -240,31 +241,11 @@ export default async function QuoteDetailPage({
 
           {/* DocuSign Status */}
           {quote.docusign_envelope_id && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">✍️ DocuSign</h3>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <dt className="text-gray-500">Status</dt>
-                  <dd>
-                    {quote.docusign_status === 'completed' ? (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-medium">Signed</span>
-                    ) : quote.docusign_status === 'sent' ? (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">Awaiting Signature</span>
-                    ) : quote.docusign_status === 'declined' ? (
-                      <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-medium">Declined</span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs font-medium capitalize">{quote.docusign_status}</span>
-                    )}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Envelope ID</dt>
-                  <dd className="text-gray-600 font-mono text-xs truncate max-w-32" title={quote.docusign_envelope_id}>
-                    {quote.docusign_envelope_id.slice(0, 8)}…
-                  </dd>
-                </div>
-              </dl>
-            </div>
+            <DocuSignStatus
+              quoteId={quote.id}
+              envelopeId={quote.docusign_envelope_id}
+              status={quote.docusign_status || 'sent'}
+            />
           )}
 
           {/* Quote Details */}
