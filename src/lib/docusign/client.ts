@@ -131,7 +131,9 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
 export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
   const auth = await getDocuSignAuth();
 
-  // Create envelope definition
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://c5-os-git-main-toms-projects-120702dc.vercel.app';
+
+  // Create envelope definition with embedded webhook (bypasses DocuSign Connect)
   const envelopeDefinition = {
     emailSubject: args.emailSubject,
     status: 'sent',
@@ -163,6 +165,16 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
             ],
           },
         },
+      ],
+    },
+    eventNotification: {
+      url: `${appUrl}/api/docusign/webhook`,
+      loggingEnabled: 'true',
+      requireAcknowledgment: 'true',
+      envelopeEvents: [
+        { envelopeEventStatusCode: 'completed' },
+        { envelopeEventStatusCode: 'declined' },
+        { envelopeEventStatusCode: 'voided' },
       ],
     },
   };
