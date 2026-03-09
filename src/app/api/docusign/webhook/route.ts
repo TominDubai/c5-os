@@ -3,13 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import { parseStringPromise } from 'xml2js';
 import { convertQuoteToProject } from '@/lib/projects/convert-quote';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 export async function POST(req: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   try {
     const rawBody = await req.text();
+    console.log('DocuSign Webhook RAW BODY:', rawBody); // Log the raw body first
+
     let payload;
     let envelopeId;
     let status;

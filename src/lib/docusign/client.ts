@@ -19,6 +19,7 @@ interface EnvelopeArgs {
   docName: string;
   docExtension: string;
   emailSubject: string;
+  webhookUrl?: string;
 }
 
 /**
@@ -27,7 +28,16 @@ interface EnvelopeArgs {
 function generateJWT(): string {
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY!;
   const userId = process.env.DOCUSIGN_USER_ID!;
-  const privateKey = fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
+  
+  let privateKey: string;
+  if (process.env.DOCUSIGN_PRIVATE_KEY) {
+    // Env var (Vercel): replace escaped newlines if needed
+    privateKey = process.env.DOCUSIGN_PRIVATE_KEY.replace(/\\n/g, '\n');
+  } else if (fs.existsSync(PRIVATE_KEY_FILE)) {
+    privateKey = fs.readFileSync(PRIVATE_KEY_FILE, 'utf8');
+  } else {
+    throw new Error('DocuSign private key not configured (set DOCUSIGN_PRIVATE_KEY env var)');
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 3600; // 1 hour expiration
@@ -127,7 +137,7 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
   const auth = await getDocuSignAuth();
 
   // Create envelope definition
-  const envelopeDefinition = {
+  const envelopeDefinition: any = {
     emailSubject: args.emailSubject,
     status: 'sent',
     documents: [
@@ -161,6 +171,29 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
       ],
     },
   };
+
+  // Add eventNotification if webhookUrl provided
+  if (args.webhookUrl) {
+    envelopeDefinition.eventNotification = {
+      url: args.webhookUrl,
+      loggingEnabled: "true",
+      requireAcknowledgment: "true",
+      useSoapInterface: "false",
+      includeCertificateWithSoap: "false",
+      signMessageWithX509Cert: "false",
+      includeDocuments: "false",
+      includeEnvelopeVoidReason: "true",
+      includeTimeZone: "true",
+      includeSenderAccountAsCustomField: "true",
+      includeDocumentFields: "true",
+      includeCertificateOfCompletion: "false",
+      envelopeEvents: [
+        { envelopeEventStatusCode: "completed" },
+        { envelopeEventStatusCode: "declined" },
+        { envelopeEventStatusCode: "voided" }
+      ]
+    };
+  }
 
   // Send envelope via REST API
   const response = await fetch(

@@ -3,11 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { sendEnvelope } from '@/lib/docusign/client';
 import { generateQuotePdf } from '@/lib/pdf/generate-quote';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // Consider switching to service role key if auth allows
-const supabase = createClient(supabaseUrl, supabaseKey);
-
 export async function POST(req: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   try {
     const { quoteId, signerEmail, signerName } = await req.json();
 
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
       docBase64: pdfBase64,
       docName: `Quote_${quoteId}.pdf`,
       docExtension: 'pdf',
-      emailSubject: 'Please sign your quote from C5 OS'
+      emailSubject: 'Please sign your quote from C5 OS',
+      webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/docusign/webhook`
     });
 
     // 5. Update Database
