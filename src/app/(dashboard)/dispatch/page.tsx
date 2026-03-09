@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import SnagSection from '@/components/SnagSection'
 
 const statusColors: Record<string, string> = {
   pending: 'bg-gray-100 text-gray-800',
@@ -25,6 +26,14 @@ export default async function DispatchPage({
   const params = await searchParams
   const view = params.view || 'ready'
   const supabase = await createClient()
+
+  // Snags (fetched for snags view)
+  const { data: openSnags } = view === 'snags' ? await supabase
+    .from('snags')
+    .select('id, snag_number, description, severity, status, location, created_at, projects(id, project_code, name)')
+    .in('status', ['open', 'in_progress'])
+    .order('severity', { ascending: true })
+    .order('created_at', { ascending: false }) : { data: [] }
   
   // Items ready for dispatch
   const { data: readyItems } = await supabase
@@ -84,7 +93,7 @@ export default async function DispatchPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-3xl font-bold text-purple-600">{readyItems?.length || 0}</div>
           <div className="text-gray-500">Ready to Ship</div>
@@ -97,6 +106,10 @@ export default async function DispatchPage({
           <div className="text-3xl font-bold text-green-600">{recentDeliveries?.length || 0}</div>
           <div className="text-gray-500">Recent Deliveries</div>
         </div>
+        <Link href="/dispatch?view=snags" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow block">
+          <div className="text-3xl font-bold text-red-500">—</div>
+          <div className="text-gray-500">Open Snags</div>
+        </Link>
       </div>
 
       {/* View Tabs */}
@@ -124,6 +137,14 @@ export default async function DispatchPage({
           }`}
         >
           Delivery History
+        </Link>
+        <Link
+          href="/dispatch?view=snags"
+          className={`px-4 py-2 rounded-md text-sm font-medium ${
+            view === 'snags' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Snags
         </Link>
       </div>
 
@@ -220,6 +241,11 @@ export default async function DispatchPage({
             </div>
           )}
         </div>
+      )}
+
+      {/* Snags View */}
+      {view === 'snags' && (
+        <SnagSection initialSnags={(openSnags || []) as any} />
       )}
 
       {/* Delivery History View */}

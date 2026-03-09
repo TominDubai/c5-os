@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import SnagSection from '@/components/SnagSection'
 
 export default async function SitePage() {
   const supabase = await createClient()
@@ -25,10 +26,10 @@ export default async function SitePage() {
 
     supabase
       .from('snags')
-      .select('id, snag_number, description, severity, status, created_at, projects(id, project_code, name)')
+      .select('id, snag_number, description, severity, status, location, created_at, projects(id, project_code, name)')
       .in('status', ['open', 'in_progress'])
-      .order('created_at', { ascending: false })
-      .limit(20),
+      .order('severity', { ascending: true })
+      .order('created_at', { ascending: false }),
 
     supabase
       .from('daily_reports')
@@ -192,38 +193,6 @@ export default async function SitePage() {
 
         {/* Right column */}
         <div className="space-y-6">
-          {/* Open snags */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-800 text-sm">Open Snags</h3>
-            </div>
-            <div className="p-4 space-y-2">
-              {openSnags && openSnags.length > 0 ? (
-                openSnags.slice(0, 8).map(snag => {
-                  const proj = snag.projects as any
-                  const severityColors: Record<string, string> = {
-                    critical: 'bg-red-100 text-red-700',
-                    major: 'bg-orange-100 text-orange-700',
-                    minor: 'bg-yellow-100 text-yellow-700',
-                  }
-                  return (
-                    <div key={snag.id} className="p-2 border border-gray-100 rounded">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${severityColors[snag.severity] || 'bg-gray-100'}`}>
-                          {snag.severity}
-                        </span>
-                        <span className="text-xs text-gray-400 font-mono">{proj?.project_code}</span>
-                      </div>
-                      <p className="text-xs text-gray-700 line-clamp-2">{snag.description}</p>
-                    </div>
-                  )
-                })
-              ) : (
-                <p className="text-sm text-green-600 text-center py-4">✓ No open snags</p>
-              )}
-            </div>
-          </div>
-
           {/* Recent daily reports */}
           <div className="bg-white rounded-lg shadow">
             <div className="px-5 py-4 border-b border-gray-100">
@@ -254,6 +223,9 @@ export default async function SitePage() {
           </div>
         </div>
       </div>
+
+      {/* Full snag management section */}
+      <SnagSection initialSnags={(openSnags || []) as any} />
     </div>
   )
 }

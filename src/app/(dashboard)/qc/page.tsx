@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import QCActions from './QCActions'
+import SnagSection from '@/components/SnagSection'
 
 export default async function QCPage({
   searchParams,
@@ -31,6 +32,14 @@ export default async function QCPage({
     .eq('status', 'installed')
     .order('installed_at', { ascending: true })
   
+  // Snags (fetched only for snags view)
+  const { data: openSnags } = view === 'snags' ? await supabase
+    .from('snags')
+    .select('id, snag_number, description, severity, status, location, created_at, projects(id, project_code, name)')
+    .in('status', ['open', 'in_progress'])
+    .order('severity', { ascending: true })
+    .order('created_at', { ascending: false }) : { data: [] }
+
   // QC Failed items
   const { data: failedItems } = await supabase
     .from('project_items')
@@ -62,7 +71,7 @@ export default async function QCPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-3xl font-bold text-blue-600">{workshopItems?.length || 0}</div>
           <div className="text-gray-500">Workshop QC Queue</div>
@@ -75,6 +84,10 @@ export default async function QCPage({
           <div className="text-3xl font-bold text-red-600">{failedItems?.length || 0}</div>
           <div className="text-gray-500">QC Failed</div>
         </div>
+        <Link href="/qc?view=snags" className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow block">
+          <div className="text-3xl font-bold text-red-500">—</div>
+          <div className="text-gray-500">Open Snags</div>
+        </Link>
       </div>
 
       {/* View Tabs */}
@@ -102,6 +115,14 @@ export default async function QCPage({
           }`}
         >
           ❌ Failed Items
+        </Link>
+        <Link
+          href="/qc?view=snags"
+          className={`px-4 py-2 rounded-md text-sm font-medium ${
+            view === 'snags' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          🔴 Snags
         </Link>
       </div>
 
@@ -195,6 +216,11 @@ export default async function QCPage({
             </div>
           )}
         </div>
+      )}
+
+      {/* Snags View */}
+      {view === 'snags' && (
+        <SnagSection initialSnags={(openSnags || []) as any} />
       )}
 
       {/* Failed Items View */}
