@@ -3,8 +3,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ProjectTabs from './ProjectTabs'
 import ProjectActions from './ProjectActions'
+import ProjectAssignments from './ProjectAssignments'
+import DepositConfirmation from './DepositConfirmation'
 
 const statusColors: Record<string, string> = {
+  awaiting_deposit: 'bg-amber-100 text-amber-800',
   design_pending: 'bg-gray-100 text-gray-800',
   in_design: 'bg-yellow-100 text-yellow-800',
   design_approved: 'bg-blue-100 text-blue-800',
@@ -15,6 +18,7 @@ const statusColors: Record<string, string> = {
 }
 
 const statusLabels: Record<string, string> = {
+  awaiting_deposit: '💳 Awaiting Deposit',
   design_pending: '⏳ Design Pending',
   in_design: '🎨 In Design',
   design_approved: '✅ Design Approved',
@@ -41,7 +45,10 @@ export default async function ProjectDetailPage({
       *,
       clients(id, name, company, email, phone),
       quotes(id, quote_number, total),
-      project_items(*)
+      project_items(*),
+      invoices(id, invoice_number, invoice_type, amount, status, paid_at, payment_method),
+      pm:users!projects_pm_id_fkey(id, full_name),
+      designer:users!projects_designer_id_fkey(id, full_name)
     `)
     .eq('id', id)
     .single()
@@ -96,8 +103,31 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
+      {/* Deposit Confirmation Banner */}
+      {project.status === 'awaiting_deposit' && (() => {
+        const depositInvoice = (project as any).invoices?.find((inv: any) => inv.invoice_type === 'deposit')
+        return depositInvoice ? (
+          <div className="mb-6">
+            <DepositConfirmation
+              projectId={project.id}
+              depositAmount={depositInvoice.amount}
+              invoiceNumber={depositInvoice.invoice_number}
+            />
+          </div>
+        ) : null
+      })()}
+
+      {/* Team Assignment */}
+      <ProjectAssignments
+        projectId={project.id}
+        pmId={project.pm_id}
+        designerId={project.designer_id}
+        pmName={(project as any).pm?.full_name || null}
+        designerName={(project as any).designer?.full_name || null}
+      />
+
       {/* Quick Stats */}
-      <div className="grid grid-cols-8 gap-3 mb-6">
+      <div className="grid grid-cols-8 gap-3 mb-6 mt-6">
         <div className="bg-white rounded-lg shadow p-3 text-center">
           <div className="text-xl font-bold text-amber-600">{itemStats.awaiting_drawings}</div>
           <div className="text-xs text-gray-500">Drawings</div>

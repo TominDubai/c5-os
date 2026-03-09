@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { SiteItemList, DailyReportForm } from './SiteActions'
+import CompletionTab from './CompletionTab'
 
 const itemStatusColors: Record<string, string> = {
   awaiting_drawings: 'bg-amber-100 text-amber-800',
@@ -61,6 +62,7 @@ const tabs = [
   { id: 'production', label: 'Production' },
   { id: 'dispatch', label: 'Dispatch' },
   { id: 'site', label: 'Site' },
+  { id: 'completion', label: '🏁 Completion' },
   { id: 'documents', label: 'Documents' },
 ]
 
@@ -106,6 +108,15 @@ export default function ProjectTabs({ project, activeTab, itemStats }: ProjectTa
       )}
       {activeTab === 'site' && (
         <SiteTab project={project} />
+      )}
+      {activeTab === 'completion' && (
+        <CompletionTab
+          projectId={project.id}
+          projectStatus={project.status}
+          contractValue={project.contract_value || 0}
+          totalItems={itemStats.total}
+          verifiedItems={itemStats.verified}
+        />
       )}
       {activeTab === 'documents' && (
         <DocumentsTab project={project} />
