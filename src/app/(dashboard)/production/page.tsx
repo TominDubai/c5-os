@@ -1,11 +1,27 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import ProductionActions from './ProductionActions'
+import ProductionScheduler from './ProductionScheduler'
 
-const statusColors: Record<string, string> = {
-  pre_production: 'bg-gray-100 text-gray-600',
-  in_production: 'bg-yellow-100 text-yellow-800',
-  ready_for_qc: 'bg-blue-100 text-blue-800',
+// Get Monday of the week for a given date
+function getMonday(date: Date): Date {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+// Generate next N week Monday dates as ISO strings
+function getUpcomingWeeks(n: number): string[] {
+  const weeks: string[] = []
+  const monday = getMonday(new Date())
+  for (let i = 0; i < n; i++) {
+    const d = new Date(monday)
+    d.setDate(d.getDate() + i * 7)
+    weeks.push(d.toISOString().split('T')[0])
+  }
+  return weeks
 }
 
 export default async function ProductionPage({
@@ -14,48 +30,57 @@ export default async function ProductionPage({
   searchParams: Promise<{ view?: string }>
 }) {
   const params = await searchParams
-  const view = params.view || 'queue'
+  const view = params.view || 'schedule'
   const supabase = await createClient()
-  
-  // Get items in production queue (pre_production status)
-  const { data: queueItems } = await supabase
+
+  // All items ready for scheduling (drawings approved)
+  const { data: schedulingItems } = await supabase
     .from('project_items')
-    .select(`
-      *,
-      projects(id, project_code, name, clients(name))
-    `)
-    .eq('status', 'pre_production')
+    .select(`*, projects(id, project_code, name, clients(name))`)
+    .eq('status', 'production_scheduling')
     .order('created_at', { ascending: true })
-  
-  // Get items currently in production
-  const { data: inProgressItems } = await supabase
+
+  // All existing production schedule entries for upcoming weeks
+  const weeks = getUpcomingWeeks(6)
+  const { data: scheduleEntries } = await supabase
+    .from('production_schedule')
+    .select(`*, project_items(id, item_code, description, value, project_id, projects(project_code, name))`)
+    .gte('scheduled_week', weeks[0])
+    .order('scheduled_week', { ascending: true })
+
+  // In production items
+  const { data: inProductionItems } = await supabase
     .from('project_items')
-    .select(`
-      *,
-      projects(id, project_code, name, clients(name))
-    `)
+    .select(`*, projects(id, project_code, name, clients(name))`)
     .eq('status', 'in_production')
     .order('production_started_at', { ascending: true })
-  
-  // Get items ready for QC
+
+  // QC ready items
   const { data: qcReadyItems } = await supabase
     .from('project_items')
-    .select(`
-      *,
-      projects(id, project_code, name)
-    `)
+    .select(`*, projects(id, project_code, name)`)
     .eq('status', 'ready_for_qc')
     .order('production_completed_at', { ascending: true })
 
-  // Group queue items by project
-  const projectGroups: Record<string, any[]> = {}
-  queueItems?.forEach(item => {
-    const projectId = item.project_id
-    if (!projectGroups[projectId]) {
-      projectGroups[projectId] = []
-    }
-    projectGroups[projectId].push(item)
+  // Determine which items are already scheduled
+  const scheduledItemIds = new Set(
+    scheduleEntries?.map((e) => e.project_item_id) || []
+  )
+  const unscheduledItems = schedulingItems?.filter(
+    (item) => !scheduledItemIds.has(item.id)
+  ) || []
+
+  // Build weekly map
+  const weeklySchedule = weeks.map((week) => {
+    const entries = scheduleEntries?.filter((e) => e.scheduled_week === week) || []
+    const totalValue = entries.reduce(
+      (sum, e) => sum + (e.project_items?.value || 0),
+      0
+    )
+    return { week, entries, totalValue }
   })
+
+  const TARGET = 1_000_000
 
   return (
     <div>
@@ -63,160 +88,140 @@ export default async function ProductionPage({
         <h1 className="text-2xl font-bold text-gray-900">Production</h1>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-3xl font-bold text-gray-600">{queueItems?.length || 0}</div>
-          <div className="text-gray-500">In Queue</div>
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-3xl font-bold text-orange-600">{unscheduledItems.length}</div>
+          <div className="text-gray-500 text-sm">To Schedule</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-3xl font-bold text-yellow-600">{inProgressItems?.length || 0}</div>
-          <div className="text-gray-500">In Production</div>
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-3xl font-bold text-yellow-600">{scheduledItemIds.size}</div>
+          <div className="text-gray-500 text-sm">Scheduled</div>
         </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-3xl font-bold text-blue-600">{qcReadyItems?.length || 0}</div>
-          <div className="text-gray-500">Ready for QC</div>
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-3xl font-bold text-blue-600">{inProductionItems?.length || 0}</div>
+          <div className="text-gray-500 text-sm">In Production</div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-3xl font-bold text-purple-600">{qcReadyItems?.length || 0}</div>
+          <div className="text-gray-500 text-sm">Ready for QC</div>
         </div>
       </div>
 
       {/* View Tabs */}
       <div className="flex gap-2 mb-6">
-        <Link
-          href="/production?view=queue"
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            view === 'queue' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Production Queue
-        </Link>
-        <Link
-          href="/production?view=progress"
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            view === 'progress' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          In Progress
-        </Link>
-        <Link
-          href="/production?view=qc"
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            view === 'qc' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Ready for QC
-        </Link>
+        {[
+          { key: 'schedule', label: '📅 Schedule' },
+          { key: 'inprogress', label: '🏭 In Production' },
+          { key: 'qc', label: '🔍 QC Ready' },
+        ].map((tab) => (
+          <Link
+            key={tab.key}
+            href={`/production?view=${tab.key}`}
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              view === tab.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {tab.label}
+          </Link>
+        ))}
       </div>
 
-      {/* Queue View */}
-      {view === 'queue' && (
-        <div className="space-y-6">
-          {Object.keys(projectGroups).length > 0 ? (
-            Object.entries(projectGroups).map(([projectId, items]) => (
-              <div key={projectId} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
-                  <div>
-                    <Link 
-                      href={`/projects/${projectId}`}
-                      className="font-semibold text-blue-600 hover:underline"
-                    >
-                      {items[0].projects?.project_code}
-                    </Link>
-                    <span className="text-gray-600 ml-2">{items[0].projects?.name}</span>
-                    <span className="text-gray-400 ml-2">• {items[0].projects?.clients?.name}</span>
-                  </div>
-                  <span className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm">
-                    {items.length} items
-                  </span>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {items.map(item => (
-                    <div key={item.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
-                      <div className="flex-1">
-                        <div className="font-mono text-sm text-gray-600">{item.item_code}</div>
-                        <div className="text-gray-900">{item.description}</div>
-                      </div>
-                      <ProductionActions itemId={item.id} currentStatus={item.status} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="bg-white rounded-lg shadow p-12 text-center text-gray-500">
-              No items in production queue. Items appear here when drawings are approved.
-            </div>
-          )}
-        </div>
+      {/* Schedule View */}
+      {view === 'schedule' && (
+        <ProductionScheduler
+          unscheduledItems={unscheduledItems}
+          weeklySchedule={weeklySchedule}
+          weeks={weeks}
+          target={TARGET}
+        />
       )}
 
-      {/* In Progress View */}
-      {view === 'progress' && (
+      {/* In Production View */}
+      {view === 'inprogress' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          {inProgressItems && inProgressItems.length > 0 ? (
+          {inProductionItems && inProductionItems.length > 0 ? (
             <div className="divide-y divide-gray-200">
-              {inProgressItems.map(item => (
+              {inProductionItems.map((item) => (
                 <div key={item.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-sm text-blue-600">{item.item_code}</span>
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${statusColors.in_production}`}>
-                        In Production
-                      </span>
+                      <Link href={`/projects/${item.project_id}`} className="text-sm text-gray-500 hover:underline">
+                        {item.projects?.project_code} — {item.projects?.name}
+                      </Link>
                     </div>
-                    <div className="text-gray-900">{item.description}</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {item.projects?.project_code} • {item.projects?.name}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-gray-900 mt-0.5">{item.description}</div>
+                    <div className="text-xs text-gray-400 mt-1">
                       Started: {item.production_started_at ? new Date(item.production_started_at).toLocaleDateString('en-GB') : '—'}
                     </div>
-                    <ProductionActions itemId={item.id} currentStatus={item.status} />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {item.value > 0 && (
+                      <span className="text-sm font-medium text-gray-700">
+                        AED {Number(item.value).toLocaleString()}
+                      </span>
+                    )}
+                    <MarkCompleteButton itemId={item.id} />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="p-12 text-center text-gray-500">
-              No items currently in production.
-            </div>
+            <div className="p-12 text-center text-gray-500">No items currently in production.</div>
           )}
         </div>
       )}
 
-      {/* Ready for QC View */}
+      {/* QC Ready View */}
       {view === 'qc' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           {qcReadyItems && qcReadyItems.length > 0 ? (
             <div className="divide-y divide-gray-200">
-              {qcReadyItems.map(item => (
+              {qcReadyItems.map((item) => (
                 <div key={item.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-sm text-blue-600">{item.item_code}</span>
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${statusColors.ready_for_qc}`}>
-                        Ready for QC
-                      </span>
+                      <Link href={`/projects/${item.project_id}`} className="text-sm text-gray-500 hover:underline">
+                        {item.projects?.project_code} — {item.projects?.name}
+                      </Link>
                     </div>
-                    <div className="text-gray-900">{item.description}</div>
-                    <div className="text-sm text-gray-500 mt-1">
-                      {item.projects?.project_code} • {item.projects?.name}
-                    </div>
+                    <div className="text-gray-900 mt-0.5">{item.description}</div>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    Completed: {item.production_completed_at ? new Date(item.production_completed_at).toLocaleDateString('en-GB') : '—'}
-                  </div>
+                  <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
+                    🔍 Awaiting QC
+                  </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="p-12 text-center text-gray-500">
-              No items ready for QC.
-            </div>
+            <div className="p-12 text-center text-gray-500">No items ready for QC.</div>
           )}
         </div>
       )}
     </div>
+  )
+}
+
+// Inline server-safe button wrapper (client action handled in scheduler)
+function MarkCompleteButton({ itemId }: { itemId: string }) {
+  return (
+    <form action={async () => {
+      'use server'
+      const { createClient } = await import('@/lib/supabase/server')
+      const supabase = await createClient()
+      await supabase
+        .from('project_items')
+        .update({ status: 'ready_for_qc', production_completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', itemId)
+    }}>
+      <button
+        type="submit"
+        className="bg-purple-600 text-white px-3 py-1.5 rounded text-sm hover:bg-purple-700"
+      >
+        Mark Complete → QC
+      </button>
+    </form>
   )
 }
