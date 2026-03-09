@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import QuoteActions from './QuoteActions'
 import QuoteDelete from './QuoteDelete'
-import QuoteAssignedTo from './QuoteAssignedTo'
 import QuoteApproval from './QuoteApproval'
 
 const statusColors: Record<string, string> = {
@@ -23,24 +22,17 @@ export default async function QuoteDetailPage({
   const { id } = await params
   const supabase = await createClient()
   
-  const [{ data: quote, error }, { data: users }] = await Promise.all([
-    supabase
-      .from('quotes')
-      .select(`
-        *,
-        clients(id, name, company, email, phone),
-        enquiries(id, enquiry_number),
-        quote_items(*),
-        approved_by_user:users!quotes_approved_by_fkey(full_name)
-      `)
-      .eq('id', id)
-      .single(),
-    supabase
-      .from('users')
-      .select('id, full_name, role')
-      .eq('is_active', true)
-      .order('full_name'),
-  ])
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select(`
+      *,
+      clients(id, name, company, email, phone),
+      enquiries(id, enquiry_number),
+      quote_items(*),
+      approved_by_user:users!quotes_approved_by_fkey(full_name)
+    `)
+    .eq('id', id)
+    .single()
 
   if (error || !quote) {
     notFound()
@@ -171,15 +163,6 @@ export default async function QuoteDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Assigned QS — only for draft quotes */}
-          {quote.status === 'draft' && (
-            <QuoteAssignedTo
-              quoteId={quote.id}
-              currentAssignedTo={quote.assigned_to}
-              users={users || []}
-            />
-          )}
-
           {/* Internal Approval — only for draft quotes */}
           {quote.status === 'draft' && !existingProject && (
             <QuoteApproval

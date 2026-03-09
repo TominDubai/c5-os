@@ -38,14 +38,7 @@ export default function QuoteApproval({
 
   const submitForApproval = async () => {
     setLoading(true)
-    await supabase
-      .from('quotes')
-      .update({
-        approval_status: 'pending',
-        approval_requested_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', quoteId)
+    await fetch(`/api/quotes/${quoteId}/request-approval`, { method: 'POST' })
     setLoading(false)
     router.refresh()
   }
@@ -85,17 +78,18 @@ export default function QuoteApproval({
 
   const resubmit = async () => {
     setLoading(true)
+    // Clear rejection data first
     await supabase
       .from('quotes')
       .update({
-        approval_status: 'pending',
         approval_notes: null,
         approved_by: null,
-        approval_requested_at: new Date().toISOString(),
         approval_completed_at: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', quoteId)
+    // Then set pending + send notifications
+    await fetch(`/api/quotes/${quoteId}/request-approval`, { method: 'POST' })
     setLoading(false)
     router.refresh()
   }

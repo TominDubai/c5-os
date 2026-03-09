@@ -162,7 +162,8 @@ export default function QuoteActions({
           room_code: item.room_code || null,
           sequence: item.sequence || null,
           quantity: Math.round(Number(item.quantity) || 1),
-          status: 'awaiting_drawings', // NEW: Start in drawings phase
+          value: Number(item.total_price) || 0,
+          status: 'awaiting_drawings',
         }))
         
         const { error: itemsError } = await supabase
@@ -268,7 +269,7 @@ export default function QuoteActions({
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-3">Actions</h3>
         <div className="space-y-2">
-          {currentStatus === 'draft' && approvalStatus === 'approved' && (
+          {['draft', 'approved'].includes(currentStatus) && approvalStatus === 'approved' && (
             <>
               <button
                 onClick={() => setShowDocuSignModal(true)}
@@ -287,7 +288,7 @@ export default function QuoteActions({
             </>
           )}
 
-          {currentStatus === 'draft' && approvalStatus !== 'approved' && (
+          {['draft', 'approved'].includes(currentStatus) && approvalStatus !== 'approved' && (
             <div className="bg-orange-50 text-orange-700 text-sm px-3 py-2 rounded-md">
               Quote must be internally approved before sending to client.
             </div>
