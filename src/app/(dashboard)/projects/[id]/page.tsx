@@ -39,22 +39,56 @@ export default async function ProjectDetailPage({
   const { tab = 'overview' } = await searchParams
   const supabase = await createClient()
   
-  const { data: project, error } = await supabase
+  // Fetch project without users join to avoid FK/relation errors; get PM/designer names separately
+  const fullSelect = `
+    *,
+    clients(id, name, company, email, phone),
+    quotes(id, quote_number, total),
+    project_items(*),
+    invoices(id, invoice_number, invoice_type, amount, status, paid_at, payment_method)
+  `
+  const minimalSelect = `
+    *,
+    clients(id, name, company, email, phone),
+    project_items(*)
+  `
+  const { data: projectData, error: projectError } = await supabase
     .from('projects')
-    .select(`
-      *,
-      clients(id, name, company, email, phone),
-      quotes(id, quote_number, total),
-      project_items(*),
-      invoices(id, invoice_number, invoice_type, amount, status, paid_at, payment_method),
-      pm:users!projects_pm_id_fkey(id, full_name),
-      designer:users!projects_designer_id_fkey(id, full_name)
-    `)
+    .select(fullSelect)
     .eq('id', id)
     .single()
-  
-  if (error || !project) {
+
+  let project = projectData
+
+  if (projectError?.code === 'PGRST116') {
     notFound()
+  }
+  if (!project && projectError) {
+    const fallback = await supabase
+      .from('projects')
+      .select(minimalSelect)
+      .eq('id', id)
+      .single()
+    if (fallback.error || !fallback.data) {
+      console.error('Project fetch error:', projectError)
+      notFound()
+    }
+    project = { ...fallback.data, quotes: [], invoices: [] }
+  }
+  if (!project) {
+    notFound()
+  }
+
+  // Optionally fetch PM and designer names (don't fail the page if users table is missing)
+  let pmName: string | null = null
+  let designerName: string | null = null
+  if (project.pm_id) {
+    const { data: pm } = await supabase.from('users').select('full_name').eq('id', project.pm_id).single()
+    pmName = pm?.full_name ?? null
+  }
+  if (project.designer_id) {
+    const { data: designer } = await supabase.from('users').select('full_name').eq('id', project.designer_id).single()
+    designerName = designer?.full_name ?? null
   }
 
   // Calculate item stats
@@ -122,8 +156,8 @@ export default async function ProjectDetailPage({
         projectId={project.id}
         pmId={project.pm_id}
         designerId={project.designer_id}
-        pmName={(project as any).pm?.full_name || null}
-        designerName={(project as any).designer?.full_name || null}
+        pmName={pmName}
+        designerName={designerName}
       />
 
       {/* Quick Stats */}

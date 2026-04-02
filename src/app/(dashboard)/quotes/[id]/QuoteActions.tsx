@@ -245,14 +245,20 @@ export default function QuoteActions({
         }),
       })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to send via DocuSign')
+      const rawText = await response.text()
+      let parsed: any = null
+      try {
+        parsed = rawText ? JSON.parse(rawText) : null
+      } catch {
+        // response was not JSON
       }
 
-      const result = await response.json()
+      if (!response.ok) {
+        const message = parsed?.error || rawText || `Server error (${response.status})`
+        throw new Error(message)
+      }
 
-      alert(`✅ Quote sent via DocuSign!\nEnvelope ID: ${result.envelopeId}`)
+      alert(`✅ Quote sent via DocuSign!\nEnvelope ID: ${parsed?.envelopeId ?? '—'}`)
       setShowDocuSignModal(false)
       router.refresh()
 

@@ -45,13 +45,13 @@ export default async function ProjectsPage({
   }
   
   const { data: projects, error } = await query
-  
+
   if (error) {
     console.error('Error fetching projects:', error)
   }
 
-  // Calculate progress for each project
-  const projectsWithProgress = projects?.map(project => {
+  // Calculate progress for each project (use empty array if error or no data)
+  const projectsWithProgress = (projects ?? []).map(project => {
     const items = project.project_items || []
     const total = items.length
     const completed = items.filter((i: any) => i.status === 'qs_verified').length
@@ -64,6 +64,12 @@ export default async function ProjectsPage({
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          Failed to load projects: {error.message}. Check that the database tables and relations exist.
+        </div>
+      )}
 
       {/* Status Filter Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -90,7 +96,7 @@ export default async function ProjectsPage({
 
       {/* Projects Grid */}
       <div className="grid gap-4">
-        {projectsWithProgress && projectsWithProgress.length > 0 ? (
+        {projectsWithProgress.length > 0 ? (
           projectsWithProgress.map((project) => (
             <Link
               key={project.id}

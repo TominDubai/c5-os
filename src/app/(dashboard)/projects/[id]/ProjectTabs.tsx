@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { SiteItemList, DailyReportForm } from './SiteActions'
 import CompletionTab from './CompletionTab'
 
@@ -271,6 +273,19 @@ function DrawingsTab({ project }: { project: any }) {
   
   return (
     <div className="space-y-6">
+      {/* Link to shop drawings: generate list + upload files */}
+      <div className="bg-white rounded-lg shadow p-4 flex items-center justify-between border border-blue-100">
+        <p className="text-gray-700">
+          Manage shop drawings: generate a drawing list from project items and upload PDFs or other files.
+        </p>
+        <Link
+          href={`/projects/${project.id}/drawings`}
+          className="shrink-0 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+        >
+          📤 Open shop drawings &amp; upload
+        </Link>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-5 gap-4">
         <div className="bg-amber-50 rounded-lg p-4 text-center">
@@ -480,15 +495,160 @@ function ProductionTab({ project }: { project: any }) {
   )
 }
 
+const dispatchStatusColors: Record<string, string> = {
+  pending: 'bg-gray-100 text-gray-700',
+  loaded: 'bg-yellow-100 text-yellow-800',
+  in_transit: 'bg-blue-100 text-blue-800',
+  delivered: 'bg-green-100 text-green-800',
+  partial_delivery: 'bg-orange-100 text-orange-800',
+}
+
+const dispatchStatusLabels: Record<string, string> = {
+  pending: '⏳ Pending',
+  loaded: '📦 Loaded',
+  in_transit: '🚚 In Transit',
+  delivered: '✅ Delivered',
+  partial_delivery: '⚠️ Partial',
+}
+
+interface DispatchItem {
+  id: string
+  delivered: boolean
+}
+
+interface Dispatch {
+  id: string
+  dispatch_number: string
+  status: string
+  scheduled_date: string | null
+  notes: string | null
+  dispatch_items: DispatchItem[]
+}
+
 function DispatchTab({ project }: { project: any }) {
+  const supabase = createClient()
+  const [dispatches, setDispatches] = useState<Dispatch[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from('dispatches')
+        .select('id, dispatch_number, status, scheduled_date, notes, dispatch_items(id, delivered)')
+        .eq('project_id', project.id)
+        .order('scheduled_date', { ascending: false })
+      setDispatches((data as Dispatch[]) || [])
+      setLoading(false)
+    }
+    load()
+  }, [project.id])
+
+  const readyItems = project.project_items?.filter(
+    (i: any) => i.status === 'ready_for_dispatch'
+  ) || []
+
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="text-center py-8 text-gray-500">
-        <p>No dispatches yet.</p>
-        <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-          Create Dispatch
-        </button>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-gray-500">
+          {dispatches.length} dispatch{dispatches.length !== 1 ? 'es' : ''} for this project
+          {readyItems.length > 0 && (
+            <span className="ml-2 text-purple-600 font-medium">
+              · {readyItems.length} item{readyItems.length !== 1 ? 's' : ''} ready to ship
+            </span>
+          )}
+        </p>
+        <Link
+          href={`/dispatch/new?project=${project.id}`}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+        >
+          + Create Dispatch
+        </Link>
       </div>
+
+      {loading ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-400 animate-pulse">
+          Loading dispatches…
+        </div>
+      ) : dispatches.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          <div className="text-4xl mb-3">📦</div>
+          <p className="font-medium mb-1">No dispatches yet</p>
+          <p className="text-sm mb-4">
+            {readyItems.length > 0
+              ? `${readyItems.length} item${readyItems.length !== 1 ? 's are' : ' is'} ready to be dispatched.`
+              : 'Items will appear here once they pass workshop QC.'}
+          </p>
+          {readyItems.length > 0 && (
+            <Link
+              href={`/dispatch/new?project=${project.id}`}
+              className="inline-block bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+            >
+              Create First Dispatch
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {dispatches.map((d) => {
+            const total = d.dispatch_items?.length || 0
+            const delivered = d.dispatch_items?.filter((i) => i.delivered).length || 0
+            const pct = total > 0 ? Math.round((delivered / total) * 100) : 0
+            return (
+              <Link
+                key={d.id}
+                href={`/dispatch/${d.id}`}
+                className="block bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="font-mono text-sm font-semibold text-gray-900">
+                      {d.dispatch_number}
+                    </span>
+                    {d.scheduled_date && (
+                      <span className="ml-3 text-sm text-gray-500">
+                        {new Date(d.scheduled_date).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      dispatchStatusColors[d.status] || 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {dispatchStatusLabels[d.status] || d.status}
+                  </span>
+                </div>
+
+                {total > 0 && (
+                  <div className="mt-3">
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>{delivered} / {total} items delivered</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          pct === 100 ? 'bg-green-500' : 'bg-blue-500'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {d.notes && (
+                  <p className="mt-2 text-xs text-gray-500 truncate">{d.notes}</p>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -509,15 +669,265 @@ function SiteTab({ project }: { project: any }) {
   )
 }
 
+const CATEGORIES = [
+  { value: 'contract', label: '📋 Contract' },
+  { value: 'quote', label: '📝 Quote' },
+  { value: 'drawing', label: '✏️ Drawing' },
+  { value: 'photo', label: '📷 Photo' },
+  { value: 'invoice', label: '💰 Invoice' },
+  { value: 'report', label: '📄 Report' },
+  { value: 'other', label: '📎 Other' },
+]
+
+interface ProjectDocument {
+  id: string
+  file_name: string
+  file_path: string
+  file_size: number | null
+  mime_type: string | null
+  category: string
+  description: string | null
+  created_at: string
+}
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 function DocumentsTab({ project }: { project: any }) {
+  const supabase = createClient()
+  const [docs, setDocs] = useState<ProjectDocument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [category, setCategory] = useState('other')
+  const [description, setDescription] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  async function loadDocs() {
+    const { data } = await supabase
+      .from('project_documents')
+      .select('*')
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false })
+    setDocs((data as ProjectDocument[]) || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { loadDocs() }, [project.id])
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedFile) return
+    setUploading(true)
+    setError(null)
+
+    try {
+      const ext = selectedFile.name.split('.').pop()
+      const path = `${project.id}/${Date.now()}-${selectedFile.name}`
+
+      const { error: storageErr } = await supabase.storage
+        .from('project-documents')
+        .upload(path, selectedFile)
+
+      if (storageErr) throw new Error(storageErr.message)
+
+      const { error: dbErr } = await supabase.from('project_documents').insert({
+        project_id: project.id,
+        file_name: selectedFile.name,
+        file_path: path,
+        file_size: selectedFile.size,
+        mime_type: selectedFile.type || null,
+        category,
+        description: description || null,
+      })
+
+      if (dbErr) throw new Error(dbErr.message)
+
+      setSelectedFile(null)
+      setDescription('')
+      setCategory('other')
+      setShowForm(false)
+      await loadDocs()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleDownload(doc: ProjectDocument) {
+    const { data } = await supabase.storage
+      .from('project-documents')
+      .createSignedUrl(doc.file_path, 60)
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank')
+    }
+  }
+
+  async function handleDelete(doc: ProjectDocument) {
+    if (!confirm(`Delete "${doc.file_name}"?`)) return
+    setDeletingId(doc.id)
+    await supabase.storage.from('project-documents').remove([doc.file_path])
+    await supabase.from('project_documents').delete().eq('id', doc.id)
+    setDocs((prev) => prev.filter((d) => d.id !== doc.id))
+    setDeletingId(null)
+  }
+
+  const categoryLabel = (val: string) =>
+    CATEGORIES.find((c) => c.value === val)?.label ?? val
+
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="text-center py-8 text-gray-500">
-        <p>No documents uploaded yet.</p>
-        <button className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-          Upload Document
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-gray-500">{docs.length} document{docs.length !== 1 ? 's' : ''}</p>
+        <button
+          onClick={() => { setShowForm((s) => !s); setError(null) }}
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+        >
+          {showForm ? 'Cancel' : '+ Upload Document'}
         </button>
       </div>
+
+      {showForm && (
+        <form
+          onSubmit={handleUpload}
+          className="bg-white rounded-lg shadow p-5 space-y-4 border border-blue-100"
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Upload Document</h3>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">File *</label>
+            <input
+              type="file"
+              required
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional note…"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setError(null) }}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={uploading || !selectedFile}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {uploading ? 'Uploading…' : 'Upload'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-400 animate-pulse">
+          Loading documents…
+        </div>
+      ) : docs.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          <div className="text-4xl mb-3">📁</div>
+          <p className="font-medium mb-1">No documents yet</p>
+          <p className="text-sm">Upload contracts, drawings, photos, invoices and more.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">File</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uploaded</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {docs.map((doc) => (
+                <tr key={doc.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="text-sm font-medium text-gray-900">{doc.file_name}</div>
+                    {doc.description && (
+                      <div className="text-xs text-gray-500 mt-0.5">{doc.description}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+                      {categoryLabel(doc.category)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{formatBytes(doc.file_size)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {new Date(doc.created_at).toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDownload(doc)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Download
+                      </button>
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        disabled={deletingId === doc.id}
+                        className="text-xs text-red-500 hover:underline disabled:opacity-50"
+                      >
+                        {deletingId === doc.id ? '…' : 'Delete'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
