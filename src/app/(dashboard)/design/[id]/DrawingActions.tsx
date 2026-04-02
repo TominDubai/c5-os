@@ -29,6 +29,10 @@ export default function DrawingActions({
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [selectedDesigner, setSelectedDesigner] = useState(assignedTo || '')
   const [dueDate, setDueDate] = useState('')
+  const [showDocuSignModal, setShowDocuSignModal] = useState(false)
+  const [signerName, setSignerName] = useState('')
+  const [signerEmail, setSignerEmail] = useState('')
+  const [sendingDocuSign, setSendingDocuSign] = useState(false)
 
   const updateStatus = async (newStatus: string) => {
     console.log('updateStatus called:', { currentStatus, newStatus, loading })
@@ -126,6 +130,32 @@ export default function DrawingActions({
     }
   }
 
+  const sendViaDocuSign = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSendingDocuSign(true)
+    try {
+      const res = await fetch('/api/docusign/send-drawing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ drawingId, signerEmail, signerName }),
+      })
+      const text = await res.text()
+      let data: any = null
+      try { data = text ? JSON.parse(text) : null } catch { /* not json */ }
+      if (!res.ok) {
+        alert(`Failed: ${data?.error || text || `Server error (${res.status})`}`)
+      } else {
+        alert(`✅ Drawing sent via DocuSign!\nEnvelope ID: ${data?.envelopeId ?? '—'}`)
+        setShowDocuSignModal(false)
+        router.refresh()
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setSendingDocuSign(false)
+    }
+  }
+
   return (
     <>
       <div className="bg-white rounded-lg shadow p-6">
@@ -144,11 +174,11 @@ export default function DrawingActions({
           {currentStatus === 'in_production' && (
             <>
               <button
-                onClick={() => updateStatus('waiting_client_approval')}
+                onClick={() => setShowDocuSignModal(true)}
                 disabled={loading}
                 className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50"
               >
-                📤 Submit for Client Approval
+                ✍️ Send via DocuSign
               </button>
               <button
                 onClick={() => setShowAssignModal(true)}
@@ -227,6 +257,57 @@ export default function DrawingActions({
           )}
         </div>
       </div>
+
+      {/* DocuSign Send Modal */}
+      {showDocuSignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <form onSubmit={sendViaDocuSign} className="bg-white rounded-lg p-6 w-full max-w-md mx-4 space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900">✍️ Send Drawing for Approval</h3>
+            <p className="text-sm text-gray-600">
+              A PDF approval sheet for <strong>{drawingTitle}</strong> ({drawingNumber}) will be sent to the client via DocuSign.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Name *</label>
+              <input
+                type="text"
+                required
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="e.g. John Smith"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client Email *</label>
+              <input
+                type="email"
+                required
+                value={signerEmail}
+                onChange={(e) => setSignerEmail(e.target.value)}
+                placeholder="client@email.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={sendingDocuSign}
+                className="flex-1 bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 disabled:opacity-50 font-medium"
+              >
+                {sendingDocuSign ? 'Sending…' : '✍️ Send via DocuSign'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDocuSignModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Assign Designer Modal */}
       {showAssignModal && (
