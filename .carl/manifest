@@ -1,0 +1,10 @@
+# CARL Manifest — C5 OS Project
+# Context Augmentation & Reinforcement Layer
+
+DEVMODE=true
+
+# C5OS domain — always-on project context
+C5OS_STATE=active
+C5OS_RECALL=
+C5OS_EXCLUDE=
+C5OS_ALWAYS_ON=true

@@ -1,0 +1,28 @@
+# C5OS Domain Rules
+# Context for Concept 5 OS project — c5-os
+
+C5OS_RULE_0=This is C5 OS — the internal project management system for Concept 5 Kitchen & Wood Industries LLC, Dubai. Next.js 15 + Supabase + Tailwind, deployed on Vercel at https://c5-os.vercel.app, dev server runs on port 3001.
+
+C5OS_RULE_1=Supabase project ID: meiupqbyvvrqbmqgnels. Service role key is set in .env.local (SUPABASE_SERVICE_ROLE_KEY) and in Vercel env vars. Anon key in NEXT_PUBLIC_SUPABASE_ANON_KEY.
+
+C5OS_RULE_2=DocuSign is fully working (as of 2 Apr 2026). Using sandbox (account-d.docusign.com). Integration key: 60bcbd22-2993-4c78-86d4-526ba6903c31. RSA private key stored in config/docusign-private.key (local) and DOCUSIGN_PRIVATE_KEY env var on Vercel (plain PEM text, NOT base64 — code uses .replace(/\\n/g, '\n')). JWT consent was granted on 2 Apr 2026.
+
+C5OS_RULE_3=DocuSign flows built: (1) Quote approval — send quote PDF, client signs, webhook auto-converts quote to project + creates 30% deposit invoice. (2) Drawing approval — send drawing approval sheet PDF, client signs, webhook auto-approves drawing and releases items to production_scheduling.
+
+C5OS_RULE_4=Webhook at /api/docusign/webhook handles three envelope types: quotes (converts to project), drawing_requirements (approves + releases to production), and projects with boq_docusign_envelope_id (BOQ/contract signing).
+
+C5OS_RULE_5=Project workflow: Enquiry → Quote (DocuSign) → Project (awaiting_deposit) → Deposit paid → Design (drawings via DocuSign) → Production scheduling → Workshop → QC → Dispatch → Site installation → Site QC → Completion/Handover.
+
+C5OS_RULE_6=Project tabs (in order): Overview, Items, Drawings, Production, Dispatch, Site, Financials, Completion, Documents. Dispatch and Documents tabs are client-side components that fetch their own data. Financials tab shows all invoices + create/send/mark-paid. Documents tab uploads to project-documents Supabase Storage bucket.
+
+C5OS_RULE_7=Migration 015 (015_project_documents.sql) creates project_documents table and project-documents storage bucket. Must be run manually in Supabase SQL editor — has NOT been confirmed as run yet.
+
+C5OS_RULE_8=Sidebar is a client component at src/components/Sidebar.tsx using usePathname() for active-state highlighting. Navigation groups: (Dashboard, Enquiries, Quotes, Projects) | (Design, Production, QC, Dispatch, Site) | (Items, Documents, Reports, Settings).
+
+C5OS_RULE_9=User invite works from /settings page. Only admin or operations role can invite. Uses Supabase admin.inviteUserByEmail(). To make a user admin: edit their row in Supabase Table Editor → users → set role to 'admin'.
+
+C5OS_RULE_10=Key people: Tom Brooks (MD, admin), Jinky Restrivera (Operations), Ramus Bautista (Senior Estimator), Raham Bautista (Design Lead), Gajanand Jangir (Production Manager), Danilo (QS/quality), Basim/Galloway/Akash/Dipak/Salman (Project Managers), Jean Suarez (Admin/Accounts).
+
+C5OS_RULE_11=Item codes format: 26XX-K-GF-RM05-102 (job code - type - floor - room - sequence). Type codes: K=Kitchen, W=Wardrobe, V=Vanity, T=TV Unit, J=Joinery. Floor codes: BF/GF/FF/SF/RF.
+
+C5OS_RULE_12=Mobile app exists at /mobile (Expo/React Native) with login screen. Not yet fully connected to the production Supabase APIs. Intended for site staff QC photos and daily reports, and drivers for dispatch confirmation.
