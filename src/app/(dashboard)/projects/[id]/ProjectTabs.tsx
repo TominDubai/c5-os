@@ -64,6 +64,7 @@ const tabs = [
   { id: 'production', label: 'Production' },
   { id: 'dispatch', label: 'Dispatch' },
   { id: 'site', label: 'Site' },
+  { id: 'financials', label: '💰 Financials' },
   { id: 'completion', label: '🏁 Completion' },
   { id: 'documents', label: 'Documents' },
 ]
@@ -110,6 +111,9 @@ export default function ProjectTabs({ project, activeTab, itemStats }: ProjectTa
       )}
       {activeTab === 'site' && (
         <SiteTab project={project} />
+      )}
+      {activeTab === 'financials' && (
+        <FinancialsTab project={project} />
       )}
       {activeTab === 'completion' && (
         <CompletionTab
@@ -668,6 +672,307 @@ function SiteTab({ project }: { project: any }) {
     </div>
   )
 }
+
+// ─── Financials Tab ──────────────────────────────────────────────────────────
+
+const INVOICE_TYPE_LABELS: Record<string, string> = {
+  deposit: '🏦 Deposit',
+  progress: '📈 Progress',
+  final: '🏁 Final',
+  retention: '🔒 Retention',
+}
+
+const INVOICE_STATUS_COLORS: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-700',
+  sent: 'bg-blue-100 text-blue-800',
+  paid: 'bg-green-100 text-green-800',
+  overdue: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-100 text-gray-400 line-through',
+}
+
+interface FinancialInvoice {
+  id: string
+  invoice_number: string
+  invoice_type: string
+  amount: number
+  percentage: number | null
+  status: string
+  issued_at: string | null
+  due_date: string | null
+  paid_at: string | null
+  payment_method: string | null
+  notes: string | null
+}
+
+function FinancialsTab({ project }: { project: any }) {
+  const supabase = createClient()
+  const [invoices, setInvoices] = useState<FinancialInvoice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [formType, setFormType] = useState<'progress' | 'final' | 'retention'>('progress')
+  const [formAmount, setFormAmount] = useState('')
+  const [formNotes, setFormNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  async function load() {
+    const { data } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, invoice_type, amount, percentage, status, issued_at, due_date, paid_at, payment_method, notes')
+      .eq('project_id', project.id)
+      .order('issued_at', { ascending: true })
+    setInvoices((data as FinancialInvoice[]) || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [project.id])
+
+  const totalInvoiced = invoices.reduce((s, i) => s + (i.status !== 'cancelled' ? i.amount : 0), 0)
+  const totalPaid = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
+  const contractValue = project.contract_value || 0
+  const invoicedPct = contractValue > 0 ? Math.round((totalInvoiced / contractValue) * 100) : 0
+  const paidPct = contractValue > 0 ? Math.round((totalPaid / contractValue) * 100) : 0
+
+  async function createInvoice(e: React.FormEvent) {
+    e.preventDefault()
+    const amount = parseFloat(formAmount)
+    if (!amount || amount <= 0) return
+    setSubmitting(true)
+    const { count } = await supabase.from('invoices').select('id', { count: 'exact', head: true })
+    const invoiceNumber = `INV-${String((count || 0) + 1).padStart(4, '0')}`
+    await supabase.from('invoices').insert({
+      project_id: project.id,
+      invoice_number: invoiceNumber,
+      invoice_type: formType,
+      amount,
+      percentage: contractValue > 0 ? parseFloat(((amount / contractValue) * 100).toFixed(1)) : null,
+      status: 'draft',
+      issued_at: new Date().toISOString(),
+      notes: formNotes || null,
+    })
+    setFormAmount('')
+    setFormNotes('')
+    setShowForm(false)
+    setSubmitting(false)
+    await load()
+  }
+
+  async function updateStatus(invoiceId: string, status: string) {
+    setActionLoading(invoiceId)
+    await supabase.from('invoices').update({
+      status,
+      ...(status === 'paid' ? { paid_at: new Date().toISOString() } : {}),
+      updated_at: new Date().toISOString(),
+    }).eq('id', invoiceId)
+    await load()
+    setActionLoading(null)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Financial Summary */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-sm text-gray-500 mb-1">Contract Value</div>
+          <div className="text-2xl font-bold text-gray-900">
+            AED {contractValue.toLocaleString()}
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-sm text-gray-500 mb-1">Invoiced</div>
+          <div className="text-2xl font-bold text-blue-700">
+            AED {totalInvoiced.toLocaleString()}
+          </div>
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>{invoicedPct}% of contract</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${Math.min(invoicedPct, 100)}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow p-5">
+          <div className="text-sm text-gray-500 mb-1">Received</div>
+          <div className="text-2xl font-bold text-green-700">
+            AED {totalPaid.toLocaleString()}
+          </div>
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>{paidPct}% of contract</span>
+              <span className="text-orange-600">
+                Outstanding: AED {(totalInvoiced - totalPaid).toLocaleString()}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-green-500 h-2 rounded-full" style={{ width: `${Math.min(paidPct, 100)}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Invoice List */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="px-5 py-4 border-b flex justify-between items-center">
+          <h3 className="font-semibold text-gray-900">Invoices</h3>
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700"
+          >
+            {showForm ? 'Cancel' : '+ New Invoice'}
+          </button>
+        </div>
+
+        {showForm && (
+          <form onSubmit={createInvoice} className="px-5 py-4 bg-blue-50 border-b space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value as any)}
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="progress">Progress Payment</option>
+                  <option value="final">Final Invoice</option>
+                  <option value="retention">Retention Release</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Amount (AED)
+                  {contractValue > 0 && formAmount && (
+                    <span className="text-blue-600 ml-1">
+                      = {((parseFloat(formAmount) / contractValue) * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={formAmount}
+                  onChange={(e) => setFormAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                <input
+                  type="text"
+                  value={formNotes}
+                  onChange={(e) => setFormNotes(e.target.value)}
+                  placeholder="Optional…"
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowForm(false)} className="px-3 py-1.5 text-sm border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="submit" disabled={submitting} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                {submitting ? 'Creating…' : 'Create Invoice'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {loading ? (
+          <div className="p-8 text-center text-gray-400 animate-pulse">Loading invoices…</div>
+        ) : invoices.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <div className="text-3xl mb-2">💰</div>
+            <p className="font-medium">No invoices yet</p>
+            <p className="text-sm text-gray-400 mt-1">
+              The deposit invoice is created automatically when a quote converts.
+            </p>
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-100">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">%</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {invoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-gray-50">
+                  <td className="px-5 py-3">
+                    <div className="font-mono text-sm font-medium text-gray-900">{inv.invoice_number}</div>
+                    {inv.notes && <div className="text-xs text-gray-400 mt-0.5">{inv.notes}</div>}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-gray-700">
+                    {INVOICE_TYPE_LABELS[inv.invoice_type] || inv.invoice_type}
+                  </td>
+                  <td className="px-5 py-3 text-sm font-semibold text-gray-900">
+                    AED {inv.amount.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-gray-500">
+                    {inv.percentage != null ? `${inv.percentage}%` : '—'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
+                    </span>
+                    {inv.paid_at && (
+                      <div className="text-xs text-green-600 mt-0.5">
+                        {new Date(inv.paid_at).toLocaleDateString('en-GB')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-sm text-gray-500">
+                    {inv.issued_at
+                      ? new Date(inv.issued_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '—'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex gap-1">
+                      {inv.status === 'draft' && (
+                        <button
+                          onClick={() => updateStatus(inv.id, 'sent')}
+                          disabled={actionLoading === inv.id}
+                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          Mark Sent
+                        </button>
+                      )}
+                      {inv.status === 'sent' && (
+                        <button
+                          onClick={() => updateStatus(inv.id, 'paid')}
+                          disabled={actionLoading === inv.id}
+                          className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50"
+                        >
+                          Mark Paid
+                        </button>
+                      )}
+                      {['draft', 'sent'].includes(inv.status) && (
+                        <button
+                          onClick={() => updateStatus(inv.id, 'cancelled')}
+                          disabled={actionLoading === inv.id}
+                          className="text-xs text-red-500 px-2 py-1 rounded hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Documents Tab ────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
   { value: 'contract', label: '📋 Contract' },
