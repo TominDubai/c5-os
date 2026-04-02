@@ -16,6 +16,7 @@ const navItems = [
   { href: '/site', label: '🏗️ Site' },
   null, // divider
   { href: '/items', label: '📍 Item Tracker' },
+  { href: '/documents', label: '📂 Documents' },
   { href: '/reports', label: '📄 Reports' },
   { href: '/settings', label: '⚙️ Settings' },
 ]

@@ -28,7 +28,6 @@ interface EnvelopeArgs {
 function generateJWT(): string {
   const integrationKey = process.env.DOCUSIGN_INTEGRATION_KEY!;
   const userId = process.env.DOCUSIGN_USER_ID!;
-  
   let privateKey: string;
   if (process.env.DOCUSIGN_PRIVATE_KEY) {
     // Env var (Vercel): replace escaped newlines if needed
@@ -93,7 +92,7 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
 
     if (!tokenResponse.ok) {
       const error = await tokenResponse.text();
-      throw new Error(`Failed to get access token: ${error}`);
+      throw new Error(`Failed to get access token (${tokenResponse.status}): ${error}`);
     }
 
     const tokenData = await tokenResponse.json();
@@ -125,8 +124,9 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
       accountId: account.account_id,
     };
   } catch (error) {
-    console.error('DocuSign Auth Error:', error);
-    throw new Error('Failed to authenticate with DocuSign');
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('DocuSign Auth Error:', message);
+    throw new Error(`DocuSign auth failed: ${message}`);
   }
 }
 
@@ -136,8 +136,15 @@ export async function getDocuSignAuth(): Promise<DocuSignAuth> {
 export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
   const auth = await getDocuSignAuth();
 
+<<<<<<< HEAD
   // Create envelope definition
   const envelopeDefinition: any = {
+=======
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://c5-os-git-main-toms-projects-120702dc.vercel.app';
+
+  // Create envelope definition with embedded webhook (bypasses DocuSign Connect)
+  const envelopeDefinition = {
+>>>>>>> origin/main
     emailSubject: args.emailSubject,
     status: 'sent',
     documents: [
@@ -168,6 +175,16 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
             ],
           },
         },
+      ],
+    },
+    eventNotification: {
+      url: `${appUrl}/api/docusign/webhook`,
+      loggingEnabled: 'true',
+      requireAcknowledgment: 'true',
+      envelopeEvents: [
+        { envelopeEventStatusCode: 'completed' },
+        { envelopeEventStatusCode: 'declined' },
+        { envelopeEventStatusCode: 'voided' },
       ],
     },
   };
@@ -215,6 +232,30 @@ export async function sendEnvelope(args: EnvelopeArgs): Promise<string> {
 
   const result = await response.json();
   return result.envelopeId;
+}
+
+/**
+ * Download the combined signed document PDF for an envelope
+ */
+export async function downloadSignedDocument(envelopeId: string): Promise<Buffer> {
+  const auth = await getDocuSignAuth();
+
+  const response = await fetch(
+    `${auth.baseUri}/restapi/v2.1/accounts/${auth.accountId}/envelopes/${envelopeId}/documents/combined`,
+    {
+      headers: {
+        Authorization: `Bearer ${auth.accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to download signed document (${response.status}): ${error}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 /**

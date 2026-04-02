@@ -4,6 +4,7 @@ import Link from 'next/link'
 import QuoteActions from './QuoteActions'
 import QuoteDelete from './QuoteDelete'
 import QuoteApproval from './QuoteApproval'
+import DocuSignStatus from './DocuSignStatus'
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-800',
@@ -219,6 +220,15 @@ export default async function QuoteDetailPage({
                 )}
               </dl>
             </div>
+          )}
+
+          {/* DocuSign Status */}
+          {quote.docusign_envelope_id && (
+            <DocuSignStatus
+              quoteId={quote.id}
+              envelopeId={quote.docusign_envelope_id}
+              status={quote.docusign_status || 'sent'}
+            />
           )}
 
           {/* Quote Details */}

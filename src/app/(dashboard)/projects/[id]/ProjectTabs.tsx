@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
@@ -268,13 +269,19 @@ function ItemsTab({ project }: { project: any }) {
 
 function DrawingsTab({ project }: { project: any }) {
   const items = project.project_items || []
-  
+
   const awaitingDrawings = items.filter((i: any) => i.status === 'awaiting_drawings')
   const inDesign = items.filter((i: any) => i.status === 'in_design')
   const drawingsComplete = items.filter((i: any) => i.status === 'drawings_complete')
   const awaitingApproval = items.filter((i: any) => i.status === 'awaiting_client_approval')
   const approved = items.filter((i: any) => i.status === 'approved')
-  
+
+  const drawingPhaseItems = [...awaitingDrawings, ...inDesign, ...drawingsComplete, ...awaitingApproval]
+  const withFile = drawingPhaseItems.filter((i: any) => i.drawing_url)
+  const progressPct = drawingPhaseItems.length > 0
+    ? Math.round((withFile.length / drawingPhaseItems.length) * 100)
+    : 0
+
   return (
     <div className="space-y-6">
       {/* Link to shop drawings: generate list + upload files */}
@@ -314,11 +321,27 @@ function DrawingsTab({ project }: { project: any }) {
         </div>
       </div>
 
+      {/* Upload Progress */}
+      {drawingPhaseItems.length > 0 && (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-gray-600">Drawings uploaded</span>
+            <span className="font-medium">{withFile.length} / {drawingPhaseItems.length}</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Awaiting Drawings */}
       {awaitingDrawings.length > 0 && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b bg-amber-50">
-            <h3 className="font-semibold text-amber-900">📋 Awaiting Drawings ({awaitingDrawings.length})</h3>
+            <h3 className="font-semibold text-amber-900">Awaiting Drawings ({awaitingDrawings.length})</h3>
           </div>
           <div className="p-4 space-y-2">
             {awaitingDrawings.map((item: any) => (
@@ -332,7 +355,7 @@ function DrawingsTab({ project }: { project: any }) {
       {inDesign.length > 0 && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b bg-yellow-50">
-            <h3 className="font-semibold text-yellow-900">🎨 In Design ({inDesign.length})</h3>
+            <h3 className="font-semibold text-yellow-900">In Design ({inDesign.length})</h3>
           </div>
           <div className="p-4 space-y-2">
             {inDesign.map((item: any) => (
@@ -346,7 +369,7 @@ function DrawingsTab({ project }: { project: any }) {
       {drawingsComplete.length > 0 && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b bg-cyan-50">
-            <h3 className="font-semibold text-cyan-900">✏️ Drawings Complete ({drawingsComplete.length})</h3>
+            <h3 className="font-semibold text-cyan-900">Drawings Complete ({drawingsComplete.length})</h3>
             <p className="text-sm text-cyan-700 mt-1">Ready to send to client for approval</p>
           </div>
           <div className="p-4 space-y-2">
@@ -361,7 +384,7 @@ function DrawingsTab({ project }: { project: any }) {
       {awaitingApproval.length > 0 && (
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b bg-orange-50">
-            <h3 className="font-semibold text-orange-900">⏳ Awaiting Client Approval ({awaitingApproval.length})</h3>
+            <h3 className="font-semibold text-orange-900">Awaiting Client Approval ({awaitingApproval.length})</h3>
           </div>
           <div className="p-4 space-y-2">
             {awaitingApproval.map((item: any) => (
@@ -376,7 +399,7 @@ function DrawingsTab({ project }: { project: any }) {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="text-center py-8 text-gray-500">
             {approved.length > 0 ? (
-              <p>✅ All drawings approved! Items ready for production scheduling.</p>
+              <p>All drawings approved! Items ready for production scheduling.</p>
             ) : (
               <p>No items in the design phase.</p>
             )}
@@ -388,18 +411,20 @@ function DrawingsTab({ project }: { project: any }) {
 }
 
 function DrawingItemRow({ item, projectId }: { item: any; projectId: string }) {
+  const [uploading, setUploading] = useState(false)
+
   const updateStatus = async (newStatus: string) => {
     const { createClient } = await import('@/lib/supabase/client')
     const supabase = createClient()
-    
+
     const { error } = await supabase
       .from('project_items')
-      .update({ 
+      .update({
         status: newStatus,
         updated_at: new Date().toISOString()
       })
       .eq('id', item.id)
-    
+
     if (error) {
       alert('Failed to update status: ' + error.message)
     } else {
@@ -407,9 +432,70 @@ function DrawingItemRow({ item, projectId }: { item: any; projectId: string }) {
     }
   }
 
+  const handleFileUpload = async (file: File) => {
+    setUploading(true)
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+
+    const fileExt = file.name.split('.').pop()
+    const filePath = `${projectId}/${item.id}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('drawings')
+      .upload(filePath, file, { upsert: true })
+
+    if (uploadError) {
+      alert('Upload failed: ' + uploadError.message)
+      setUploading(false)
+      return
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('drawings')
+      .getPublicUrl(filePath)
+
+    const { error: updateError } = await supabase
+      .from('project_items')
+      .update({
+        drawing_url: urlData.publicUrl,
+        drawing_uploaded_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', item.id)
+
+    setUploading(false)
+
+    if (updateError) {
+      alert('Failed to save drawing link: ' + updateError.message)
+    } else {
+      window.location.reload()
+    }
+  }
+
+  const removeDrawing = async () => {
+    if (!confirm('Remove this drawing file?')) return
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+
+    await supabase.storage
+      .from('drawings')
+      .remove([`${projectId}/${item.id}.${item.drawing_url?.split('.').pop()}`])
+
+    await supabase
+      .from('project_items')
+      .update({
+        drawing_url: null,
+        drawing_uploaded_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', item.id)
+
+    window.location.reload()
+  }
+
   return (
     <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm text-blue-600">{item.item_code}</span>
           <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${itemStatusColors[item.status]}`}>
@@ -419,11 +505,49 @@ function DrawingItemRow({ item, projectId }: { item: any; projectId: string }) {
         <div className="text-sm text-gray-900 mt-1">{item.description}</div>
         {item.floor_code && (
           <div className="text-xs text-gray-500 mt-1">
-            {item.floor_code} • {item.room_code}
+            {item.floor_code} {item.room_code && <>• {item.room_code}</>}
           </div>
         )}
+
+        {/* Drawing file */}
+        <div className="mt-2">
+          {item.drawing_url ? (
+            <div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded px-2.5 py-1">
+              <a
+                href={item.drawing_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-700 hover:underline font-medium"
+              >
+                View Drawing
+              </a>
+              <button
+                onClick={removeDrawing}
+                className="text-xs text-red-500 hover:text-red-700"
+                title="Remove drawing"
+              >
+                &times;
+              </button>
+            </div>
+          ) : (
+            <label className={`inline-flex items-center gap-1.5 text-xs cursor-pointer rounded px-2.5 py-1 border border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+              {uploading ? 'Uploading...' : 'Upload Drawing'}
+              <input
+                type="file"
+                accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleFileUpload(file)
+                }}
+                disabled={uploading}
+              />
+            </label>
+          )}
+        </div>
       </div>
-      <div className="flex gap-2">
+
+      <div className="flex gap-2 ml-4 shrink-0">
         {item.status === 'awaiting_drawings' && (
           <button
             onClick={() => updateStatus('in_design')}
@@ -461,7 +585,7 @@ function DrawingItemRow({ item, projectId }: { item: any; projectId: string }) {
             onClick={() => updateStatus('production_scheduling')}
             className="text-xs bg-gray-600 text-white px-3 py-1.5 rounded hover:bg-gray-700"
           >
-            → Schedule Production
+            Schedule Production
           </button>
         )}
       </div>
